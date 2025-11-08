@@ -141,7 +141,7 @@ app.get('/api/events', authMiddleware, async (_, res) => {
   }
 });
 
-// ========== Generate Certificate (Perfect Alignment) ==========
+// ========== Generate Certificate + Mail ==========
 app.post('/api/submit/:eventId', async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -155,7 +155,7 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const meta = await sharp(tplFull).metadata();
     const tplW = meta.width, tplH = meta.height;
 
-    // Convert normalized values back to real pixels
+    // Convert normalized coordinates
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
@@ -164,11 +164,11 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const qy = ev.qrY * tplH;
     const qsize = ev.qrSize * tplW;
 
-    // --- Generate QR ---
+    // Generate QR
     const qrText = `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
     const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: Math.round(qsize) });
 
-    // --- Generate Text SVG (clean scaling) ---
+    // Create SVG text
     const alignMap = { left: 'start', center: 'middle', right: 'end' };
     const textAnchor = alignMap[ev.nameAlign] || 'middle';
     const textX =
@@ -209,14 +209,7 @@ app.post('/api/submit/:eventId', async (req, res) => {
       eId, name, email, mobile, dept, year, enroll, certRel, 'generated'
     );
 
-    res.json({ success: true, certPath: certRel });
-  } catch (err) {
-    console.error('Generation Error:', err);
-    res.status(500).json({ error: 'Server error', details: err.message });
-  }
-});
-
-    // ---- Send Mail (async IIFE) ----
+    // Send mail asynchronously (non-blocking)
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       (async () => {
         try {
@@ -310,4 +303,3 @@ function escapeXml(unsafe) {
 app.get('/api/test', (_, res) => res.json({ success: true, message: "Backend is running fine!" }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-
