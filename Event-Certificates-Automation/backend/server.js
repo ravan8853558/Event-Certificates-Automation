@@ -1,5 +1,5 @@
 // ===============================
-// UEM Event Certificates - Final Backend (Stable Release)
+// UEM Event Certificates - Final Backend (SVG Fit & Mail Ready)
 // ===============================
 
 require('dotenv').config();
@@ -31,14 +31,17 @@ const CERTS_DIR = path.join(UPLOAD_DIR, 'certs');
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
-// ------------------- Multer setup -------------------
+// Utility: clamp integer
+const clampInt = (v, min, max) => Math.max(min, Math.min(max, parseInt(v || 0)));
+
+// Multer for uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, TEMPLATES_DIR),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`)
+  destination: (_, __, cb) => cb(null, TEMPLATES_DIR),
+  filename: (_, file, cb) => cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`)
 });
 const upload = multer({ storage });
 
-// ------------------- DB setup -------------------
+// DB setup
 let db;
 (async () => {
   db = await open({ filename: path.join(__dirname, 'data.db'), driver: sqlite3.Database });
@@ -46,8 +49,10 @@ let db;
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT, date TEXT, venue TEXT, orgBy TEXT,
-      templatePath TEXT, nameX INTEGER, nameY INTEGER,
-      nameFontSize INTEGER, qrX INTEGER, qrY INTEGER, qrSize INTEGER
+      templatePath TEXT,
+      nameBoxX INTEGER, nameBoxY INTEGER, nameBoxW INTEGER, nameBoxH INTEGER,
+      nameFontFamily TEXT, nameFontSize INTEGER, nameFontColor TEXT, nameAlign TEXT,
+      qrX INTEGER, qrY INTEGER, qrSize INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS responses (
@@ -60,78 +65,79 @@ let db;
   console.log('✅ Database connected.');
 })();
 
+// App setup
 const app = express();
 app.use(cors());
-app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.json({ limit: '12mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ------------------- Auth -------------------
+// JWT Auth
 function generateToken() {
   return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: '12h' });
 }
-
 function authMiddleware(req, res, next) {
-  let token = null;
-  if (req.headers.authorization?.startsWith('Bearer '))
-    token = req.headers.authorization.split(' ')[1];
-  if (!token && req.query.token)
-    token = req.query.token;
-
-  if (!token)
-    return res.status(401).json({ error: 'Unauthorized, token missing' });
-
+  let token = req.headers.authorization?.split(' ')[1] || req.query.token;
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     jwt.verify(token, JWT_SECRET);
     next();
-  } catch (err) {
-    console.error('Auth error:', err.message);
-    return res.status(401).json({ error: 'Invalid or expired token' });
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
   }
 }
 
+// Admin login
 app.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password } = req.body;
   if (username === ADMIN_USER && password === ADMIN_PASS)
     return res.json({ token: generateToken() });
   res.status(401).json({ error: 'Invalid credentials' });
 });
 
-// ------------------- Upload Template -------------------
+// Upload certificate template
 app.post('/api/upload-template', upload.single('template'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const meta = await sharp(req.file.path).metadata();
-    res.json({ success: true, path: `/uploads/templates/${req.file.filename}`, width: meta.width, height: meta.height });
+    res.json({
+      success: true,
+      path: `/uploads/templates/${req.file.filename}`,
+      width: meta.width,
+      height: meta.height
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Upload failed', details: err.message });
   }
 });
 
-// ------------------- Create Event -------------------
+// Create event
 app.post('/api/events', authMiddleware, async (req, res) => {
   try {
     const p = req.body;
-    if (!p.templatePath) return res.status(400).json({ error: 'Template required' });
     const stmt = await db.run(
-      `INSERT INTO events (name, date, venue, orgBy, templatePath, nameX, nameY, nameFontSize, qrX, qrY, qrSize)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO events 
+       (name,date,venue,orgBy,templatePath,nameBoxX,nameBoxY,nameBoxW,nameBoxH,
+        nameFontFamily,nameFontSize,nameFontColor,nameAlign,qrX,qrY,qrSize)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       p.name, p.date, p.venue, p.orgBy, p.templatePath,
-      Math.round(p.nameX), Math.round(p.nameY),
-      Math.round(p.nameFontSize), Math.round(p.qrX), Math.round(p.qrY), Math.round(p.qrSize)
+      clampInt(p.nameBoxX, 0, 10000), clampInt(p.nameBoxY, 0, 10000),
+      clampInt(p.nameBoxW, 10, 20000), clampInt(p.nameBoxH, 10, 20000),
+      p.nameFontFamily || 'Poppins', clampInt(p.nameFontSize, 8, 200),
+      p.nameFontColor || '#0ea5e9', p.nameAlign || 'center',
+      clampInt(p.qrX, 0, 20000), clampInt(p.qrY, 0, 20000), clampInt(p.qrSize, 10, 2000)
     );
-    const id = stmt.lastID;
-    res.json({ success: true, eventId: id, formLink: `${BASE_URL}/form/${id}` });
+    res.json({ success: true, eventId: stmt.lastID, formLink: `${BASE_URL}/form/${stmt.lastID}` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create event', details: err.message });
   }
 });
 
-// ------------------- List Events -------------------
-app.get('/api/events', authMiddleware, async (req, res) => {
+// List events
+app.get('/api/events', authMiddleware, async (_, res) => {
   try {
     const events = await db.all('SELECT * FROM events ORDER BY id DESC');
     res.json({ success: true, data: events });
@@ -141,10 +147,10 @@ app.get('/api/events', authMiddleware, async (req, res) => {
   }
 });
 
-// ------------------- Test Route -------------------
-app.get('/api/test', (_, res) => res.json({ success: true, message: 'Backend is running fine!' }));
+// Test
+app.get('/api/test', (_, res) => res.json({ success: true, message: "Backend is running fine!" }));
 
-// ------------------- Submit Participant + Certificate -------------------
+// Generate Certificate
 app.post('/api/submit/:eventId', async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -154,38 +160,49 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const { name, email, mobile, dept, year, enroll } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'Missing name/email' });
 
+    const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ''));
+    const meta = await sharp(tplFull).metadata();
+    const tplW = meta.width, tplH = meta.height;
+
+    // Ensure within bounds
+    const nbx = clampInt(ev.nameBoxX, 0, tplW - 1);
+    const nby = clampInt(ev.nameBoxY, 0, tplH - 1);
+    const nbw = clampInt(ev.nameBoxW, 10, tplW - nbx);
+    const nbh = clampInt(ev.nameBoxH, 10, tplH - nby);
+    const qx = clampInt(ev.qrX, 0, tplW - 1);
+    const qy = clampInt(ev.qrY, 0, tplH - 1);
+    const qsize = clampInt(ev.qrSize, 10, Math.min(tplW, tplH));
+
     const qrText = `${name} has successfully participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
-    const templateFull = path.join(__dirname, ev.templatePath.replace(/^\//, ''));
+    const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: qsize });
 
-    // Get actual template dimensions
-    const meta = await sharp(templateFull).metadata();
-    const tplW = meta.width;
-    const tplH = meta.height;
+    // SVG text (fit within box)
+    const alignMap = { left: 'start', center: 'middle', right: 'end' };
+    const textAnchor = alignMap[ev.nameAlign] || 'middle';
+    const svgX = textAnchor === 'start' ? 0 : textAnchor === 'end' ? nbw : nbw / 2;
 
-    // Clamp coordinates to template bounds
-    const safeX = Math.min(Math.max(0, Math.round(ev.nameX)), tplW - 10);
-    const safeY = Math.min(Math.max(0, Math.round(ev.nameY)), tplH - 10);
-    const safeQrX = Math.min(Math.max(0, Math.round(ev.qrX)), tplW - 10);
-    const safeQrY = Math.min(Math.max(0, Math.round(ev.qrY)), tplH - 10);
-    const qrSize = Math.min(Math.round(ev.qrSize), Math.min(tplW, tplH));
-
-    // Create SVG with correct size (no overflow)
     const svg = `
-      <svg width="${tplW}" height="${tplH}" xmlns="http://www.w3.org/2000/svg">
-        <style>.t{font-family:Inter,sans-serif;font-size:${Math.round(ev.nameFontSize)}px;fill:#0ea5e9;font-weight:600;}</style>
-        <text x="${safeX}" y="${safeY}" class="t">${escapeXml(name)}</text>
+      <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
+        <style>
+          .t {
+            font-family: '${ev.nameFontFamily || 'Poppins'}', sans-serif;
+            font-size: ${ev.nameFontSize || 36}px;
+            fill: ${ev.nameFontColor || '#0ea5e9'};
+            font-weight: 600;
+          }
+        </style>
+        <text x="${svgX}" y="${nbh / 2}" text-anchor="${textAnchor}" dominant-baseline="middle"
+          textLength="${nbw}" lengthAdjust="spacingAndGlyphs" class="t">${escapeXml(name)}</text>
       </svg>`;
+
     const svgBuf = Buffer.from(svg);
-
-    // Generate QR code with safe size
-    const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: qrSize });
-
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
-    await sharp(templateFull)
+
+    await sharp(tplFull)
       .composite([
-        { input: svgBuf, top: 0, left: 0 },
-        { input: qrBuffer, top: safeQrY, left: safeQrX }
+        { input: svgBuf, top: nby, left: nbx },
+        { input: qrBuffer, top: qy, left: qx }
       ])
       .png()
       .toFile(certFull);
@@ -197,6 +214,23 @@ app.post('/api/submit/:eventId', async (req, res) => {
       eId, name, email, mobile, dept, year, enroll, certRel, 'generated'
     );
 
+    // Email (optional)
+    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: false,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      });
+      await transporter.sendMail({
+        from: process.env.FROM_EMAIL || process.env.SMTP_USER,
+        to: email,
+        subject: `Your Certificate for ${ev.name}`,
+        text: `Dear ${name},\n\nPlease find attached your certificate for ${ev.name}.\n\nRegards,\n${ev.orgBy}`,
+        attachments: [{ filename: 'certificate.png', path: certFull }]
+      });
+    }
+
     res.json({ success: true, certPath: certRel });
   } catch (err) {
     console.error(err);
@@ -204,7 +238,7 @@ app.post('/api/submit/:eventId', async (req, res) => {
   }
 });
 
-// ------------------- Download Event Data -------------------
+// Download data
 app.get('/api/download-data/:id', authMiddleware, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -213,15 +247,15 @@ app.get('/api/download-data/:id', authMiddleware, async (req, res) => {
     const rows = await db.all('SELECT * FROM responses WHERE event_id=?', id);
 
     const csvHead = ['id','name','email','mobile','dept','year','enroll','cert_path','email_status','email_error','created_at'];
-    const csvLines = [csvHead.join(',')];
-    rows.forEach(r => csvLines.push([r.id, `"${r.name}"`, r.email, r.mobile, r.dept, r.year, r.enroll, r.cert_path, r.email_status, `"${r.email_error}"`, r.created_at].join(',')));
-    const csv = Buffer.from(csvLines.join('\n'), 'utf8');
+    const csv = [csvHead.join(',')];
+    rows.forEach(r => csv.push([r.id, `"${r.name}"`, r.email, r.mobile, r.dept, r.year, r.enroll, r.cert_path, r.email_status, `"${r.email_error}"`, r.created_at].join(',')));
+    const csvBuf = Buffer.from(csv.join('\n'));
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename=event-${id}-data.zip`);
     const zip = archiver('zip', { zlib: { level: 9 } });
     zip.pipe(res);
-    zip.append(csv, { name: `event-${id}-data.csv` });
+    zip.append(csvBuf, { name: `event-${id}-data.csv` });
     rows.forEach(r => {
       if (r.cert_path) {
         const f = path.join(__dirname, r.cert_path.replace(/^\//, ''));
@@ -231,38 +265,38 @@ app.get('/api/download-data/:id', authMiddleware, async (req, res) => {
     await zip.finalize();
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to download', details: err.message });
+    res.status(500).json({ error: 'Download failed', details: err.message });
   }
 });
 
-// ------------------- Simple Form Route -------------------
+// Simple participant form
 app.get('/form/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   const ev = await db.get('SELECT * FROM events WHERE id=?', id);
   if (!ev) return res.status(404).send('Event not found');
   res.send(`
-  <html><head><meta charset="utf-8"/><title>${ev.name}</title></head>
-  <body style="font-family:sans-serif;padding:2rem;">
+  <html><body style="font-family:sans-serif;padding:2rem;">
     <h2>${ev.name}</h2>
     <form method="POST" action="/api/submit/${id}">
-      <input name="name" placeholder="Name" required /><br/>
-      <input name="email" placeholder="Email" required /><br/>
-      <input name="mobile" placeholder="Mobile" /><br/>
-      <input name="dept" placeholder="Department" /><br/>
-      <input name="year" placeholder="Year" /><br/>
-      <input name="enroll" placeholder="Enrollment No." /><br/>
+      <input name="name" placeholder="Name" required/><br/>
+      <input name="email" placeholder="Email" required/><br/>
+      <input name="mobile" placeholder="Mobile"/><br/>
+      <input name="dept" placeholder="Department"/><br/>
+      <input name="year" placeholder="Year"/><br/>
+      <input name="enroll" placeholder="Enrollment"/><br/>
       <button type="submit">Submit</button>
     </form>
   </body></html>`);
 });
 
-// ------------------- Health Check -------------------
-app.get('/health', (_, res) => res.json({ ok: true }));
-
-// ------------------- Helper -------------------
+// Escape XML
 function escapeXml(unsafe) {
-  return String(unsafe).replace(/[<>&'"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'})[c]);
+  return unsafe.replace(/[<>&'"]/g, c => ({
+    '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
+  }[c]));
 }
 
-// ------------------- Start Server -------------------
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+// Health check
+app.get('/health', (_, res) => res.json({ ok: true }));
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
