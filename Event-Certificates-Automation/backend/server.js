@@ -141,7 +141,7 @@ app.get('/api/events', authMiddleware, async (_, res) => {
   }
 });
 
-// ========== Generate Certificate ==========
+// ========== Generate Certificate (Correct Alignment) ==========
 app.post('/api/submit/:eventId', async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -153,12 +153,14 @@ app.post('/api/submit/:eventId', async (req, res) => {
 
     const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ''));
     const meta = await sharp(tplFull).metadata();
-    const tplW = meta.width, tplH = meta.height;
+    const tplW = meta.width;
+    const tplH = meta.height;
 
-    // scale preview (1100x850) -> actual
+    // Scale values relative to the 1100x850 preview base
     const scaleX = tplW / 1100;
     const scaleY = tplH / 850;
 
+    // Correctly scale every dimension
     const nbx = ev.nameBoxX * scaleX;
     const nby = ev.nameBoxY * scaleY;
     const nbw = ev.nameBoxW * scaleX;
@@ -167,9 +169,14 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const qy = ev.qrY * scaleY;
     const qsize = ev.qrSize * scaleX;
 
+    // === Generate QR ===
     const qrText = `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
-    const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: Math.round(qsize) });
+    const qrBuffer = await QRCode.toBuffer(qrText, {
+      type: 'png',
+      width: Math.round(qsize)
+    });
 
+    // === Generate Text Layer ===
     const alignMap = { left: 'start', center: 'middle', right: 'end' };
     const textAnchor = alignMap[ev.nameAlign] || 'middle';
     const svgX = textAnchor === 'start' ? 0 : textAnchor === 'end' ? nbw : nbw / 2;
@@ -192,6 +199,7 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
 
+    // === Composite Image ===
     await sharp(tplFull)
       .composite([
         { input: svgBuf, top: Math.round(nby), left: Math.round(nbx) },
@@ -206,6 +214,13 @@ app.post('/api/submit/:eventId', async (req, res) => {
        VALUES (?,?,?,?,?,?,?,?,?)`,
       eId, name, email, mobile, dept, year, enroll, certRel, 'generated'
     );
+
+    res.json({ success: true, certPath: certRel });
+  } catch (err) {
+    console.error('Generation Error:', err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
 
     // ---- Send Mail ----
     try {
@@ -303,3 +318,4 @@ function escapeXml(unsafe) {
 
 app.get('/api/test', (_, res) => res.json({ success: true, message: "Backend is running fine!" }));
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
