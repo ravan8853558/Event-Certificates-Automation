@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UEM Event Certificates</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1>UEM Event Certificates</h1>
+      <p class="subtitle">Automation • Verified • Fast</p>
+    </div>
+    <div class="header-right">
+      <button id="sendTest">Send Test Certificate</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="block">
+      <h2>Event Details</h2>
+      <div class="row">
+        <div class="half">
+          <label>Event Name</label>
+          <input id="eventName" placeholder="Ex: Robotics Workshop" />
+        </div>
+        <div class="half">
+          <label>Event Date</label>
+          <input type="date" id="eventDate" />
+        </div>
+      </div>
+      <label>Venue</label>
+      <input id="venue" placeholder="Ex: Seminar Hall" />
+
+      <label>Organized By</label>
+      <input id="orgBy" placeholder="Ex: UEM Club" />
+
+      <label>Certificate Template</label>
+      <input type="file" id="templateFile" accept="image/*" />
+
+      <div class="button-group">
+        <button id="generateForm">Generate Form Link</button>
+        <button id="downloadData">Download Event Data</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Template Controls</h2>
+      <input type="range" min="10" max="120" value="36" id="fontSize" class="slider" />
+      <input id="namePreview" placeholder="Preview Name" />
+
+      <input type="range" min="20" max="300" value="80" id="qrSize" class="slider" />
+
+      <div class="preview-box">
+        <canvas id="canvasPreview" width="1000" height="700"></canvas>
+      </div>
+
+      <div class="button-group center">
+        <button id="placeName">Place Name</button>
+        <button id="placeQR">Place QR</button>
+        <button id="clearMarkers" class="danger">Clear Markers</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Participant Form</h2>
+      <input id="pName" placeholder="Full Name" />
+      <input id="pEmail" placeholder="Email" />
+      <input id="pMobile" placeholder="Mobile" />
+      <input id="pDept" placeholder="Department" />
+      <select id="pYear">
+        <option>1st</option>
+        <option>2nd</option>
+        <option>3rd</option>
+      </select>
+      <input id="pEnroll" placeholder="Enrollment No." />
+      <div class="button-group center">
+        <button id="generateCert">Generate Certificate</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

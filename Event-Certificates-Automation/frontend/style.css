@@ -1,0 +1,263 @@
+/* ===============================
+   UEM Event Certificates - Final CSS
+   =============================== */
+
+* {
+  box-sizing: border-box;
+  font-family: "Inter", sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: radial-gradient(circle at top left, #0d1b2a, #000);
+  color: #fff;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ===== HEADER ===== */
+header {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+header h1 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.header-right button {
+  background: #0ea5e9;
+  color: #fff;
+  border: none;
+  padding: 0.7rem 1.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.header-right button:hover {
+  background: #38bdf8;
+}
+
+/* ===== MAIN CONTENT ===== */
+main {
+  width: 95%;
+  max-width: 1200px;
+  margin: 2rem auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.block {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 2rem;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+}
+
+.block h1,
+.block h2 {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
+}
+
+/* ===== FORM ELEMENTS ===== */
+label {
+  display: block;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+input,
+select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  padding: 0.7rem;
+  border-radius: 6px;
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+}
+
+input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+input[type="file"] {
+  background: transparent;
+  color: #ccc;
+  padding: 0.4rem 0;
+}
+
+/* ===== BUTTONS ===== */
+button {
+  background: #0ea5e9;
+  color: #fff;
+  border: none;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: 0.3s ease;
+}
+
+button:hover {
+  background: #38bdf8;
+}
+
+button.danger {
+  background: #ef4444;
+}
+button.danger:hover {
+  background: #f87171;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 1rem;
+  margin-top: 1.2rem;
+}
+
+.button-group.center {
+  justify-content: center;
+}
+
+/* ===== ROW LAYOUT ===== */
+.row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.half {
+  flex: 1;
+  min-width: 280px;
+}
+
+/* ===== SLIDERS ===== */
+.slider {
+  width: 100%;
+  margin: 0.7rem 0 1rem 0;
+}
+
+/* ===== CANVAS PREVIEW ===== */
+.preview-box {
+  position: relative;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  background: #0f172a;
+  border-radius: 10px;
+  margin-top: 1.2rem;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem;
+  max-height: 450px;
+}
+
+.preview-box canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 1000px;
+  border-radius: 8px;
+}
+
+/* ===== STATS ===== */
+.stats {
+  display: flex;
+  justify-content: space-evenly;
+  margin-top: 1.5rem;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 1rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.stat-box {
+  text-align: center;
+  flex: 1;
+  min-width: 140px;
+}
+
+.stat-box h3 {
+  margin: 0;
+  font-size: 1.8rem;
+  color: #0ea5e9;
+}
+
+.stat-box p {
+  opacity: 0.8;
+  font-size: 0.9rem;
+}
+
+/* ===== FOOTER ===== */
+footer {
+  text-align: center;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 1rem;
+}
+
+/* ===== NOTE TEXT ===== */
+.note {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  text-align: center;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 900px) {
+  header {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.8rem;
+  }
+  .button-group {
+    justify-content: center;
+  }
+  .stats {
+    flex-direction: column;
+    align-items: center;
+  }
+  .preview-box {
+    max-height: 380px;
+  }
+}
+
+@media (max-width: 600px) {
+  main {
+    width: 98%;
+  }
+  .block {
+    padding: 1.2rem;
+  }
+  input,
+  select {
+    font-size: 0.9rem;
+  }
+  button {
+    width: 100%;
+  }
+}
