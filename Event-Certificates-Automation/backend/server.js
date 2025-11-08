@@ -24,6 +24,7 @@ const ADMIN_USER = process.env.ADMIN_USER || "admin@uem.com";
 const ADMIN_PASS = process.env.ADMIN_PASS || "UEM@12345";
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
+// Paths
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const TEMPLATES_DIR = path.join(UPLOAD_DIR, "templates");
 const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
@@ -173,37 +174,37 @@ app.post("/api/submit/:eventId", async (req, res) => {
 
     const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
     const meta = await sharp(tplFull).metadata();
-    const tplW = meta.width;
-    const tplH = meta.height;
+    const tplW = meta.width, tplH = meta.height;
 
-    // Proper scaling from preview (1100x850)
-    const PREVIEW_W = 1100;
-    const PREVIEW_H = 850;
+    // Scaling reference based on preview 1100x850
+    const PREVIEW_W = 1100, PREVIEW_H = 850;
     const scaleX = tplW / PREVIEW_W;
     const scaleY = tplH / PREVIEW_H;
 
-    // Convert normalized positions correctly
+    // Convert to actual pixel positions
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
     const nbh = ev.nameBoxH * tplH;
 
-    // 🔹 Fix: Scale font proportionally to template height
-    const scaledFontSize = (ev.nameFontSize || 36) * scaleY;
+    // Scale font size proportionally
+    const scaledFontSize = (ev.nameFontSize || 36) * (tplH / PREVIEW_H);
 
+    // Text alignment
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
     const textX =
-      textAnchor === "start" ? 10 : textAnchor === "end" ? nbw - 10 : nbw / 2;
+      textAnchor === "start" ? 0 : textAnchor === "end" ? nbw : nbw / 2;
+    const textY = nbh / 2 + scaledFontSize * 0.35; // vertically balanced center
 
     // Generate QR
     const qrText = `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
     const qrBuffer = await QRCode.toBuffer(qrText, {
       type: "png",
-      width: 120, // fixed QR size
+      width: 120,
     });
 
-    // Create SVG for name
+    // SVG for text overlay
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
         <style>
@@ -214,7 +215,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
             font-weight: 600;
           }
         </style>
-        <text x="${textX}" y="${nbh / 2}" text-anchor="${textAnchor}"
+        <text x="${textX}" y="${textY}" text-anchor="${textAnchor}"
               dominant-baseline="middle" class="t">${escapeXml(name)}</text>
       </svg>`;
 
@@ -225,7 +226,11 @@ app.post("/api/submit/:eventId", async (req, res) => {
     await sharp(tplFull)
       .composite([
         { input: svgBuf, top: Math.round(nby), left: Math.round(nbx) },
-        { input: qrBuffer, top: Math.round(ev.qrY * tplH), left: Math.round(ev.qrX * tplW) },
+        {
+          input: qrBuffer,
+          top: Math.round(ev.qrY * tplH),
+          left: Math.round(ev.qrX * tplW),
+        },
       ])
       .png()
       .toFile(certFull);
@@ -245,7 +250,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
       "generated"
     );
 
-    // Send mail (async)
+    // Email asynchronously
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       (async () => {
         try {
@@ -309,18 +314,14 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
     const csvBuf = Buffer.from(csv.join("\n"));
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=event-${id}-data.zip`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename=event-${id}-data.zip`);
     const zip = archiver("zip", { zlib: { level: 9 } });
     zip.pipe(res);
     zip.append(csvBuf, { name: `event-${id}-data.csv` });
     rows.forEach((r) => {
       if (r.cert_path) {
         const f = path.join(__dirname, r.cert_path.replace(/^\//, ""));
-        if (fs.existsSync(f))
-          zip.file(f, { name: `certs/${path.basename(f)}` });
+        if (fs.existsSync(f)) zip.file(f, { name: `certs/${path.basename(f)}` });
       }
     });
     await zip.finalize();
