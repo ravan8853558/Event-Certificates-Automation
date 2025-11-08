@@ -173,37 +173,37 @@ app.post("/api/submit/:eventId", async (req, res) => {
 
     const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
     const meta = await sharp(tplFull).metadata();
-    const tplW = meta.width, tplH = meta.height;
+    const tplW = meta.width;
+    const tplH = meta.height;
 
-    // 🔥 FIX: Match exact scaling with preview (1100x850)
+    // Proper scaling from preview (1100x850)
     const PREVIEW_W = 1100;
     const PREVIEW_H = 850;
     const scaleX = tplW / PREVIEW_W;
     const scaleY = tplH / PREVIEW_H;
 
-    // Convert normalized coords to actual pixels
-    const nbx = ev.nameBoxX * PREVIEW_W * scaleX;
-    const nby = ev.nameBoxY * PREVIEW_H * scaleY;
-    const nbw = ev.nameBoxW * PREVIEW_W * scaleX;
-    const nbh = ev.nameBoxH * PREVIEW_H * scaleY;
-    const qx = ev.qrX * PREVIEW_W * scaleX;
-    const qy = ev.qrY * PREVIEW_H * scaleY;
-    const qsize = ev.qrSize * PREVIEW_W * scaleX;
+    // Convert normalized positions correctly
+    const nbx = ev.nameBoxX * tplW;
+    const nby = ev.nameBoxY * tplH;
+    const nbw = ev.nameBoxW * tplW;
+    const nbh = ev.nameBoxH * tplH;
+
+    // 🔹 Fix: Scale font proportionally to template height
+    const scaledFontSize = (ev.nameFontSize || 36) * scaleY;
+
+    const alignMap = { left: "start", center: "middle", right: "end" };
+    const textAnchor = alignMap[ev.nameAlign] || "middle";
+    const textX =
+      textAnchor === "start" ? 10 : textAnchor === "end" ? nbw - 10 : nbw / 2;
 
     // Generate QR
     const qrText = `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
     const qrBuffer = await QRCode.toBuffer(qrText, {
       type: "png",
-      width: Math.round(qsize),
+      width: 120, // fixed QR size
     });
 
-    // Properly scaled SVG text
-    const alignMap = { left: "start", center: "middle", right: "end" };
-    const textAnchor = alignMap[ev.nameAlign] || "middle";
-    const textX =
-      textAnchor === "start" ? 10 : textAnchor === "end" ? nbw - 10 : nbw / 2;
-    const scaledFontSize = (ev.nameFontSize || 36) * scaleY;
-
+    // Create SVG for name
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
         <style>
@@ -225,7 +225,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
     await sharp(tplFull)
       .composite([
         { input: svgBuf, top: Math.round(nby), left: Math.round(nbx) },
-        { input: qrBuffer, top: Math.round(qy), left: Math.round(qx) },
+        { input: qrBuffer, top: Math.round(ev.qrY * tplH), left: Math.round(ev.qrX * tplW) },
       ])
       .png()
       .toFile(certFull);
@@ -245,7 +245,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
       "generated"
     );
 
-    // Send mail asynchronously (non-blocking)
+    // Send mail (async)
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       (async () => {
         try {
