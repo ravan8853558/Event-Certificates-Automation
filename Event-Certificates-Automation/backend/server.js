@@ -222,26 +222,27 @@ app.post('/api/submit/:eventId', async (req, res) => {
   }
 });
 
-    // ---- Send Mail ----
+// ---- Send Mail ----
+if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  (async () => {
     try {
-      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: false,
-          auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-        });
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: false,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      });
 
-        await transporter.sendMail({
-          from: process.env.FROM_EMAIL || process.env.SMTP_USER,
-          to: email,
-          subject: `Your Certificate - ${ev.name}`,
-          text: `Dear ${name},\n\nPlease find attached your certificate for ${ev.name}.\n\nRegards,\n${ev.orgBy}`,
-          attachments: [{ filename: 'certificate.png', path: certFull }]
-        });
+      await transporter.sendMail({
+        from: process.env.FROM_EMAIL || process.env.SMTP_USER,
+        to: email,
+        subject: `Your Certificate - ${ev.name}`,
+        text: `Dear ${name},\n\nPlease find attached your certificate for ${ev.name}.\n\nRegards,\n${ev.orgBy}`,
+        attachments: [{ filename: 'certificate.png', path: certFull }]
+      });
 
-        await db.run(`UPDATE responses SET email_status='sent' WHERE email=? AND event_id=?`, email, eId);
-      }
+      await db.run(`UPDATE responses SET email_status='sent' WHERE email=? AND event_id=?`, email, eId);
+      console.log(`✅ Mail sent to ${email}`);
     } catch (mailErr) {
       console.error("Mail Error:", mailErr.message);
       await db.run(
@@ -249,13 +250,8 @@ app.post('/api/submit/:eventId', async (req, res) => {
         mailErr.message, email, eId
       );
     }
-
-    res.json({ success: true, certPath: certRel });
-  } catch (err) {
-    console.error("Generation Error:", err);
-    res.status(500).json({ error: 'Server error', details: err.message });
-  }
-});
+  })();
+}
 
 // ========== Download Event Data ==========
 app.get('/api/download-data/:id', authMiddleware, async (req, res) => {
@@ -318,4 +314,5 @@ function escapeXml(unsafe) {
 
 app.get('/api/test', (_, res) => res.json({ success: true, message: "Backend is running fine!" }));
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
 
