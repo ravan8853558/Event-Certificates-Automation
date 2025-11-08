@@ -176,39 +176,36 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const meta = await sharp(tplFull).metadata();
     const tplW = meta.width, tplH = meta.height;
 
-    // ✅ Proper scaling from preview (1100x850)
-    const PREVIEW_W = 1100;
-    const PREVIEW_H = 850;
+    // Proper scaling based on preview reference
+    const PREVIEW_W = 1100, PREVIEW_H = 850;
     const scaleX = tplW / PREVIEW_W;
     const scaleY = tplH / PREVIEW_H;
 
-    // Convert normalized name box positions
+    // Name box in actual pixels
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
     const nbh = ev.nameBoxH * tplH;
 
-    // ✅ Fix font scaling (no zoom-in effect)
-    const scaledFontSize = (ev.nameFontSize || 36) * scaleY * 0.9;
-
-    // Proper alignment
+    // 🔹 Font fix: smaller scaling, tighter vertical center
+    const scaledFontSize = (ev.nameFontSize || 36) * scaleY * 0.8;
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
     const textX =
       textAnchor === "start" ? 0 : textAnchor === "end" ? nbw : nbw / 2;
-    const textY = nbh / 2 + scaledFontSize * 0.35; // visually centered
+    const textY = nbh / 2 + scaledFontSize * 0.25;
 
-    // ✅ Perfect 50x50 QR bottom-right alignment
-    const qrSize = 50; // fixed 50px
+    // 🔹 Fixed QR: bottom-right, slightly further out
+    const qrSize = 50;
+    const qrMargin = 40; // shift right/down more
     const qrBuffer = await QRCode.toBuffer(
       `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
       { type: "png", width: qrSize }
     );
+    const qrX = tplW - qrSize - qrMargin;
+    const qrY = tplH - qrSize - qrMargin;
 
-    const qrX = tplW - qrSize - 60; // padding from right edge
-    const qrY = tplH - qrSize - 60; // padding from bottom edge
-
-    // Generate SVG for text overlay
+    // Name SVG
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
         <style>
@@ -227,7 +224,6 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
 
-    // Composite name + QR on certificate
     await sharp(tplFull)
       .composite([
         { input: svgBuf, top: Math.round(nby), left: Math.round(nbx) },
@@ -250,6 +246,13 @@ app.post("/api/submit/:eventId", async (req, res) => {
       certRel,
       "generated"
     );
+
+    res.json({ success: true, certPath: certRel });
+  } catch (err) {
+    console.error("Generation Error:", err);
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+});
 
     // ✅ Send mail asynchronously
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
@@ -364,4 +367,5 @@ app.get("/api/test", (_, res) =>
 );
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
 
