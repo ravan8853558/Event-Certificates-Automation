@@ -156,11 +156,10 @@ app.post('/api/events', authMiddleware, async (req, res) => {
   }
 });
 
-
+// Test route to verify backend works
 app.get("/api/test", (req, res) => {
-  res.json({ success: true, message: "Backend is running" });
+  res.json({ success: true, message: "Backend is running fine!" });
 });
-
 
 // ========== Submit Participant & Generate Certificate ==========
 app.post('/api/submit/:eventId', async (req, res) => {
@@ -315,6 +314,7 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 
 // ========== Start ==========
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
