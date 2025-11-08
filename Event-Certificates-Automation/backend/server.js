@@ -141,7 +141,7 @@ app.get('/api/events', authMiddleware, async (_, res) => {
   }
 });
 
-// ========== Generate Certificate ==========
+// ========== Generate Certificate (Perfect Alignment) ==========
 app.post('/api/submit/:eventId', async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -153,10 +153,9 @@ app.post('/api/submit/:eventId', async (req, res) => {
 
     const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ''));
     const meta = await sharp(tplFull).metadata();
-    const tplW = meta.width;
-    const tplH = meta.height;
+    const tplW = meta.width, tplH = meta.height;
 
-    // Use normalized coordinates directly
+    // Convert normalized values back to real pixels
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
@@ -165,13 +164,18 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const qy = ev.qrY * tplH;
     const qsize = ev.qrSize * tplW;
 
-    // QR
+    // --- Generate QR ---
     const qrText = `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
     const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: Math.round(qsize) });
 
-    // Name SVG
+    // --- Generate Text SVG (clean scaling) ---
     const alignMap = { left: 'start', center: 'middle', right: 'end' };
     const textAnchor = alignMap[ev.nameAlign] || 'middle';
+    const textX =
+      textAnchor === 'start' ? 10 :
+      textAnchor === 'end' ? nbw - 10 :
+      nbw / 2;
+
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
         <style>
@@ -182,11 +186,11 @@ app.post('/api/submit/:eventId', async (req, res) => {
             font-weight: 600;
           }
         </style>
-        <text x="${nbw / 2}" y="${nbh / 2}" text-anchor="${textAnchor}"
+        <text x="${textX}" y="${nbh / 2}" text-anchor="${textAnchor}"
               dominant-baseline="middle" class="t">${escapeXml(name)}</text>
       </svg>`;
-    const svgBuf = Buffer.from(svg);
 
+    const svgBuf = Buffer.from(svg);
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
 
@@ -204,6 +208,13 @@ app.post('/api/submit/:eventId', async (req, res) => {
        VALUES (?,?,?,?,?,?,?,?,?)`,
       eId, name, email, mobile, dept, year, enroll, certRel, 'generated'
     );
+
+    res.json({ success: true, certPath: certRel });
+  } catch (err) {
+    console.error('Generation Error:', err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
 
     // ---- Send Mail (async IIFE) ----
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
@@ -299,3 +310,4 @@ function escapeXml(unsafe) {
 app.get('/api/test', (_, res) => res.json({ success: true, message: "Backend is running fine!" }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
