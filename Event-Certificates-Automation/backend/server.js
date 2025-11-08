@@ -45,49 +45,43 @@ const upload = multer({ storage });
 
 // DB setup
 let db;
+
 (async () => {
-  db = new sqlite3.Database(path.join(__dirname, 'data.db'), (err) => {
-  if (err) {
-    console.error('Database connection error:', err);
-  } else {
-    console.log('Database connected.');
-  }
-});
+  db = await open({
+    filename: path.join(__dirname, 'data.db'),
+    driver: sqlite3.Database
+  });
+
   await db.exec(`
-    PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT PRIMARY KEY,
       name TEXT,
       date TEXT,
       venue TEXT,
-      org_by TEXT,
-      template_path TEXT,
-      template_w INTEGER,
-      template_h INTEGER,
-      name_x INTEGER,
-      name_y INTEGER,
-      name_fontsize INTEGER,
-      qr_x INTEGER,
-      qr_y INTEGER,
-      qr_size INTEGER,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      orgBy TEXT,
+      templatePath TEXT,
+      nameX INTEGER,
+      nameY INTEGER,
+      nameFontSize INTEGER,
+      qrX INTEGER,
+      qrY INTEGER,
+      qrSize INTEGER
     );
-    CREATE TABLE IF NOT EXISTS responses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_id INTEGER,
+
+    CREATE TABLE IF NOT EXISTS participants (
+      id TEXT PRIMARY KEY,
+      eventId TEXT,
       name TEXT,
       email TEXT,
       mobile TEXT,
       dept TEXT,
       year TEXT,
       enroll TEXT,
-      cert_path TEXT,
-      email_status TEXT,
-      email_error TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+      certPath TEXT
     );
   `);
+
+  console.log('✅ Database connected.');
 })();
 
 const app = express();
@@ -314,6 +308,7 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 
 // ========== Start ==========
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
