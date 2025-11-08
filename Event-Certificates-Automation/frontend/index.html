@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>UEM Event Certificates</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    select, input[type="number"], input[type="color"], input[type="text"], input[type="date"], input[type="file"] {
+      width: 100%;
+      padding: 0.5rem;
+      border-radius: 6px;
+      border: none;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 0.95rem;
+    }
+    label { font-size: 0.9rem; opacity: 0.9; }
+  </style>
 </head>
 <body>
   <header>
@@ -13,13 +25,14 @@
       <p class="subtitle">Automation • Verified • Fast</p>
     </div>
     <div class="header-right">
-      <button id="sendTest">Send Test Certificate</button>
+      <button id="sendTest">Test Connection</button>
     </div>
   </header>
 
   <main>
+    <!-- Event Setup -->
     <section class="block">
-      <h2>Event Details</h2>
+      <h2>Event Setup</h2>
       <div class="row">
         <div class="half">
           <label>Event Name</label>
@@ -30,56 +43,123 @@
           <input type="date" id="eventDate" />
         </div>
       </div>
+
       <label>Venue</label>
       <input id="venue" placeholder="Ex: Seminar Hall" />
 
       <label>Organized By</label>
       <input id="orgBy" placeholder="Ex: UEM Club" />
 
-      <label>Certificate Template</label>
+      <label>Upload Certificate Template</label>
       <input type="file" id="templateFile" accept="image/*" />
 
       <div class="button-group">
-        <button id="generateForm">Generate Form Link</button>
-        <button id="downloadData">Download Event Data</button>
+        <button id="uploadTemplate">Upload Template</button>
+        <button id="createEvent">Create Event</button>
       </div>
     </section>
 
+    <!-- Template Preview -->
     <section class="block">
-      <h2>Template Controls</h2>
-      <input type="range" min="10" max="120" value="36" id="fontSize" class="slider" />
-      <input id="namePreview" placeholder="Preview Name" />
-
-      <input type="range" min="20" max="300" value="80" id="qrSize" class="slider" />
+      <h2>Template Preview (A4 Landscape)</h2>
+      <p>Drag and resize the name box. Adjust font, size, color, and alignment below.</p>
 
       <div class="preview-box">
-        <canvas id="canvasPreview" width="1000" height="700"></canvas>
+        <canvas id="canvasPreview" width="1100" height="850"></canvas>
       </div>
 
-      <div class="button-group center">
-        <button id="placeName">Place Name</button>
-        <button id="placeQR">Place QR</button>
-        <button id="clearMarkers" class="danger">Clear Markers</button>
+      <div class="row" style="margin-top:1rem;">
+        <div class="half">
+          <label>Font Family</label>
+          <select id="fontFamily">
+            <option>Poppins</option>
+            <option>Roboto</option>
+            <option>Montserrat</option>
+            <option>Open Sans</option>
+            <option>Lora</option>
+            <option>Playfair Display</option>
+            <option>Pacifico</option>
+            <option>Times New Roman</option>
+          </select>
+        </div>
+
+        <div class="half">
+          <label>Font Size (px)</label>
+          <input id="fontSizeInput" type="number" min="8" max="120" value="36" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:1rem;">
+        <div class="half">
+          <label>Text Color</label>
+          <input id="fontColor" type="color" value="#0ea5e9" />
+        </div>
+
+        <div class="half">
+          <label>Alignment</label>
+          <select id="textAlign">
+            <option value="center" selected>Center</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:1rem;">
+        <div class="half">
+          <label>Name Box Width (px)</label>
+          <input id="boxWidthInput" type="number" min="100" max="1000" value="400" />
+        </div>
+
+        <div class="half">
+          <label>Name Box Height (px)</label>
+          <input id="boxHeightInput" type="number" min="30" max="300" value="80" />
+        </div>
+      </div>
+
+      <div class="button-group center" style="margin-top:0.8rem;">
+        <button id="clearMarkers" class="danger">Reset Name Box</button>
       </div>
     </section>
 
+    <!-- Participant Test Form -->
     <section class="block">
-      <h2>Participant Form</h2>
-      <input id="pName" placeholder="Full Name" />
-      <input id="pEmail" placeholder="Email" />
-      <input id="pMobile" placeholder="Mobile" />
-      <input id="pDept" placeholder="Department" />
-      <select id="pYear">
-        <option>1st</option>
-        <option>2nd</option>
-        <option>3rd</option>
-      </select>
-      <input id="pEnroll" placeholder="Enrollment No." />
-      <div class="button-group center">
-        <button id="generateCert">Generate Certificate</button>
+      <h2>Participant Test Form</h2>
+      <input id="namePreviewInput" placeholder="Preview Name (Live update)" />
+      <div style="display:flex;gap:0.6rem;margin-top:0.6rem;">
+        <input id="pName" placeholder="Full Name" />
+        <input id="pEmail" placeholder="Email" />
       </div>
+      <div style="display:flex;gap:0.6rem;margin-top:0.6rem;">
+        <input id="pMobile" placeholder="Mobile" />
+        <input id="pDept" placeholder="Department" />
+      </div>
+      <div style="display:flex;gap:0.6rem;margin-top:0.6rem;">
+        <select id="pYear">
+          <option>1st</option><option>2nd</option><option>3rd</option><option>4th</option>
+        </select>
+        <input id="pEnroll" placeholder="Enrollment No." />
+      </div>
+
+      <div class="button-group center" style="margin-top:0.8rem;">
+        <button id="generateCert">Generate Test Certificate</button>
+      </div>
+    </section>
+
+    <!-- Event Management -->
+    <section class="block">
+      <h2>Event Management</h2>
+      <div class="button-group center">
+        <button id="viewEvents">View All Events</button>
+        <button id="downloadData">Download Event Data</button>
+      </div>
+      <div id="eventList" style="margin-top:1rem;"></div>
     </section>
   </main>
+
+  <footer>
+    <p>© 2025 UEM Event Certificates Automation</p>
+  </footer>
 
   <script src="script.js"></script>
 </body>
