@@ -8,7 +8,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3');
-const { open } = require('sqlite');
+const sqlite3 = require('sqlite3').verbose();
 const sharp = require('sharp');
 const QRCode = require('qrcode');
 const nodemailer = require('nodemailer');
@@ -47,10 +47,13 @@ const upload = multer({ storage });
 // DB setup
 let db;
 (async () => {
-  db = await open({
-    filename: path.join(__dirname, 'data.db'),
-    driver: sqlite3.Database
-  });
+  db = new sqlite3.Database(path.join(__dirname, 'data.db'), (err) => {
+  if (err) {
+    console.error('Database connection error:', err);
+  } else {
+    console.log('Database connected.');
+  }
+});
   await db.exec(`
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS events (
@@ -312,3 +315,4 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 
 // ========== Start ==========
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
