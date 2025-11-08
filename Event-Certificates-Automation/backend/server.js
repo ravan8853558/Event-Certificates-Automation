@@ -1,5 +1,5 @@
 // ===============================
-// UEM Event Certificates - Final Backend (SVG Fit & Mail Ready)
+// UEM Event Certificates - Final Backend (Perfect Alignment + Mail Fix)
 // ===============================
 
 require('dotenv').config();
@@ -31,17 +31,16 @@ const CERTS_DIR = path.join(UPLOAD_DIR, 'certs');
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
-// Utility: clamp integer
 const clampInt = (v, min, max) => Math.max(min, Math.min(max, parseInt(v || 0)));
 
-// Multer for uploads
+// ========== Multer ==========
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, TEMPLATES_DIR),
   filename: (_, file, cb) => cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`)
 });
 const upload = multer({ storage });
 
-// DB setup
+// ========== Database ==========
 let db;
 (async () => {
   db = await open({ filename: path.join(__dirname, 'data.db'), driver: sqlite3.Database });
@@ -50,9 +49,9 @@ let db;
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT, date TEXT, venue TEXT, orgBy TEXT,
       templatePath TEXT,
-      nameBoxX INTEGER, nameBoxY INTEGER, nameBoxW INTEGER, nameBoxH INTEGER,
+      nameBoxX REAL, nameBoxY REAL, nameBoxW REAL, nameBoxH REAL,
       nameFontFamily TEXT, nameFontSize INTEGER, nameFontColor TEXT, nameAlign TEXT,
-      qrX INTEGER, qrY INTEGER, qrSize INTEGER
+      qrX REAL, qrY REAL, qrSize REAL
     );
 
     CREATE TABLE IF NOT EXISTS responses (
@@ -62,18 +61,16 @@ let db;
       email_status TEXT, email_error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  console.log('✅ Database connected.');
+  console.log('✅ Database ready.');
 })();
 
-// App setup
+// ========== App Setup ==========
 const app = express();
 app.use(cors());
-app.use(bodyParser.json({ limit: '12mb' }));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json({ limit: '15mb' }));
+app.use('/uploads', express.static(UPLOAD_DIR));
 
-// JWT Auth
+// ========== Auth ==========
 function generateToken() {
   return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: '12h' });
 }
@@ -84,11 +81,9 @@ function authMiddleware(req, res, next) {
     jwt.verify(token, JWT_SECRET);
     next();
   } catch {
-    return res.status(401).json({ error: 'Invalid token' });
+    res.status(401).json({ error: 'Invalid token' });
   }
 }
-
-// Admin login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
   if (username === ADMIN_USER && password === ADMIN_PASS)
@@ -96,7 +91,7 @@ app.post('/api/admin/login', (req, res) => {
   res.status(401).json({ error: 'Invalid credentials' });
 });
 
-// Upload certificate template
+// ========== Upload Template ==========
 app.post('/api/upload-template', upload.single('template'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -113,7 +108,7 @@ app.post('/api/upload-template', upload.single('template'), async (req, res) => 
   }
 });
 
-// Create event
+// ========== Create Event ==========
 app.post('/api/events', authMiddleware, async (req, res) => {
   try {
     const p = req.body;
@@ -136,21 +131,17 @@ app.post('/api/events', authMiddleware, async (req, res) => {
   }
 });
 
-// List events
+// ========== List Events ==========
 app.get('/api/events', authMiddleware, async (_, res) => {
   try {
     const events = await db.all('SELECT * FROM events ORDER BY id DESC');
     res.json({ success: true, data: events });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch events' });
+    res.status(500).json({ error: 'Failed to load events' });
   }
 });
 
-// Test
-app.get('/api/test', (_, res) => res.json({ success: true, message: "Backend is running fine!" }));
-
-// Generate Certificate
+// ========== Generate Certificate ==========
 app.post('/api/submit/:eventId', async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -164,19 +155,21 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const meta = await sharp(tplFull).metadata();
     const tplW = meta.width, tplH = meta.height;
 
-    // Ensure within bounds
-    const nbx = clampInt(ev.nameBoxX, 0, tplW - 1);
-    const nby = clampInt(ev.nameBoxY, 0, tplH - 1);
-    const nbw = clampInt(ev.nameBoxW, 10, tplW - nbx);
-    const nbh = clampInt(ev.nameBoxH, 10, tplH - nby);
-    const qx = clampInt(ev.qrX, 0, tplW - 1);
-    const qy = clampInt(ev.qrY, 0, tplH - 1);
-    const qsize = clampInt(ev.qrSize, 10, Math.min(tplW, tplH));
+    // scale preview (1100x850) -> actual
+    const scaleX = tplW / 1100;
+    const scaleY = tplH / 850;
 
-    const qrText = `${name} has successfully participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
-    const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: qsize });
+    const nbx = ev.nameBoxX * scaleX;
+    const nby = ev.nameBoxY * scaleY;
+    const nbw = ev.nameBoxW * scaleX;
+    const nbh = ev.nameBoxH * scaleY;
+    const qx = ev.qrX * scaleX;
+    const qy = ev.qrY * scaleY;
+    const qsize = ev.qrSize * scaleX;
 
-    // SVG text (fit within box)
+    const qrText = `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
+    const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: Math.round(qsize) });
+
     const alignMap = { left: 'start', center: 'middle', right: 'end' };
     const textAnchor = alignMap[ev.nameAlign] || 'middle';
     const svgX = textAnchor === 'start' ? 0 : textAnchor === 'end' ? nbw : nbw / 2;
@@ -186,13 +179,13 @@ app.post('/api/submit/:eventId', async (req, res) => {
         <style>
           .t {
             font-family: '${ev.nameFontFamily || 'Poppins'}', sans-serif;
-            font-size: ${ev.nameFontSize || 36}px;
+            font-size: ${(ev.nameFontSize || 36) * scaleY}px;
             fill: ${ev.nameFontColor || '#0ea5e9'};
             font-weight: 600;
           }
         </style>
-        <text x="${svgX}" y="${nbh / 2}" text-anchor="${textAnchor}" dominant-baseline="middle"
-          textLength="${nbw}" lengthAdjust="spacingAndGlyphs" class="t">${escapeXml(name)}</text>
+        <text x="${svgX}" y="${nbh / 2}" text-anchor="${textAnchor}" 
+              dominant-baseline="middle" class="t">${escapeXml(name)}</text>
       </svg>`;
 
     const svgBuf = Buffer.from(svg);
@@ -201,8 +194,8 @@ app.post('/api/submit/:eventId', async (req, res) => {
 
     await sharp(tplFull)
       .composite([
-        { input: svgBuf, top: nby, left: nbx },
-        { input: qrBuffer, top: qy, left: qx }
+        { input: svgBuf, top: Math.round(nby), left: Math.round(nbx) },
+        { input: qrBuffer, top: Math.round(qy), left: Math.round(qx) }
       ])
       .png()
       .toFile(certFull);
@@ -214,31 +207,42 @@ app.post('/api/submit/:eventId', async (req, res) => {
       eId, name, email, mobile, dept, year, enroll, certRel, 'generated'
     );
 
-    // Email (optional)
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: false,
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-      });
-      await transporter.sendMail({
-        from: process.env.FROM_EMAIL || process.env.SMTP_USER,
-        to: email,
-        subject: `Your Certificate for ${ev.name}`,
-        text: `Dear ${name},\n\nPlease find attached your certificate for ${ev.name}.\n\nRegards,\n${ev.orgBy}`,
-        attachments: [{ filename: 'certificate.png', path: certFull }]
-      });
+    // ---- Send Mail ----
+    try {
+      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || '587'),
+          secure: false,
+          auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+        });
+
+        await transporter.sendMail({
+          from: process.env.FROM_EMAIL || process.env.SMTP_USER,
+          to: email,
+          subject: `Your Certificate - ${ev.name}`,
+          text: `Dear ${name},\n\nPlease find attached your certificate for ${ev.name}.\n\nRegards,\n${ev.orgBy}`,
+          attachments: [{ filename: 'certificate.png', path: certFull }]
+        });
+
+        await db.run(`UPDATE responses SET email_status='sent' WHERE email=? AND event_id=?`, email, eId);
+      }
+    } catch (mailErr) {
+      console.error("Mail Error:", mailErr.message);
+      await db.run(
+        `UPDATE responses SET email_status='failed', email_error=? WHERE email=? AND event_id=?`,
+        mailErr.message, email, eId
+      );
     }
 
     res.json({ success: true, certPath: certRel });
   } catch (err) {
-    console.error(err);
+    console.error("Generation Error:", err);
     res.status(500).json({ error: 'Server error', details: err.message });
   }
 });
 
-// Download data
+// ========== Download Event Data ==========
 app.get('/api/download-data/:id', authMiddleware, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -248,7 +252,9 @@ app.get('/api/download-data/:id', authMiddleware, async (req, res) => {
 
     const csvHead = ['id','name','email','mobile','dept','year','enroll','cert_path','email_status','email_error','created_at'];
     const csv = [csvHead.join(',')];
-    rows.forEach(r => csv.push([r.id, `"${r.name}"`, r.email, r.mobile, r.dept, r.year, r.enroll, r.cert_path, r.email_status, `"${r.email_error}"`, r.created_at].join(',')));
+    rows.forEach(r =>
+      csv.push([r.id, `"${r.name}"`, r.email, r.mobile, r.dept, r.year, r.enroll, r.cert_path, r.email_status, `"${r.email_error}"`, r.created_at].join(','))
+    );
     const csvBuf = Buffer.from(csv.join('\n'));
 
     res.setHeader('Content-Type', 'application/zip');
@@ -264,12 +270,11 @@ app.get('/api/download-data/:id', authMiddleware, async (req, res) => {
     });
     await zip.finalize();
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Download failed', details: err.message });
   }
 });
 
-// Simple participant form
+// ========== Form (Public) ==========
 app.get('/form/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   const ev = await db.get('SELECT * FROM events WHERE id=?', id);
@@ -289,14 +294,12 @@ app.get('/form/:id', async (req, res) => {
   </body></html>`);
 });
 
-// Escape XML
+// ========== XML Escape ==========
 function escapeXml(unsafe) {
-  return unsafe.replace(/[<>&'"]/g, c => ({
-    '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
-  }[c]));
+  return unsafe.replace(/[<>&'"]/g, c =>
+    ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c])
+  );
 }
 
-// Health check
-app.get('/health', (_, res) => res.json({ ok: true }));
-
+app.get('/api/test', (_, res) => res.json({ success: true, message: "Backend is running fine!" }));
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
