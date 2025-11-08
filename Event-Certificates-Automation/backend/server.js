@@ -187,7 +187,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const nbh = ev.nameBoxH * tplH;
 
     // ✅ Font fix: smaller scaling, perfect centering
-    const scaledFontSize = (ev.nameFontSize || 36) * scaleY * 0.75;
+    const scaledFontSize = (ev.nameFontSize || 48) * scaleY * 0.65;
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
     const textX = textAnchor === "start" ? 0 : textAnchor === "end" ? nbw : nbw / 2;
@@ -195,7 +195,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
 
     // ✅ QR perfect alignment bottom-right (fixed 50px)
     const qrSize = 50;
-    const qrMargin = 70;
+    const qrMargin = 30;
     const qrBuffer = await QRCode.toBuffer(
       `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
       { type: "png", width: qrSize }
@@ -346,4 +346,5 @@ app.get("/api/test", (_, res) =>
 );
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
 
