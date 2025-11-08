@@ -157,20 +157,35 @@ app.post('/api/submit/:eventId', async (req, res) => {
     const qrText = `${name} has successfully participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
     const templateFull = path.join(__dirname, ev.templatePath.replace(/^\//, ''));
 
-    const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: Math.round(ev.qrSize) });
+    // Get actual template dimensions
+    const meta = await sharp(templateFull).metadata();
+    const tplW = meta.width;
+    const tplH = meta.height;
+
+    // Clamp coordinates to template bounds
+    const safeX = Math.min(Math.max(0, Math.round(ev.nameX)), tplW - 10);
+    const safeY = Math.min(Math.max(0, Math.round(ev.nameY)), tplH - 10);
+    const safeQrX = Math.min(Math.max(0, Math.round(ev.qrX)), tplW - 10);
+    const safeQrY = Math.min(Math.max(0, Math.round(ev.qrY)), tplH - 10);
+    const qrSize = Math.min(Math.round(ev.qrSize), Math.min(tplW, tplH));
+
+    // Create SVG with correct size (no overflow)
     const svg = `
-      <svg width="2000" height="1200" xmlns="http://www.w3.org/2000/svg">
-        <style>.t{font-family:Inter,sans-serif;font-size:${ev.nameFontSize}px;fill:#0ea5e9;font-weight:600;}</style>
-        <text x="${ev.nameX}" y="${ev.nameY}" class="t">${name}</text>
+      <svg width="${tplW}" height="${tplH}" xmlns="http://www.w3.org/2000/svg">
+        <style>.t{font-family:Inter,sans-serif;font-size:${Math.round(ev.nameFontSize)}px;fill:#0ea5e9;font-weight:600;}</style>
+        <text x="${safeX}" y="${safeY}" class="t">${escapeXml(name)}</text>
       </svg>`;
     const svgBuf = Buffer.from(svg);
+
+    // Generate QR code with safe size
+    const qrBuffer = await QRCode.toBuffer(qrText, { type: 'png', width: qrSize });
 
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
     await sharp(templateFull)
       .composite([
         { input: svgBuf, top: 0, left: 0 },
-        { input: qrBuffer, top: Math.round(ev.qrY), left: Math.round(ev.qrX) }
+        { input: qrBuffer, top: safeQrY, left: safeQrX }
       ])
       .png()
       .toFile(certFull);
@@ -244,5 +259,10 @@ app.get('/form/:id', async (req, res) => {
 // ------------------- Health Check -------------------
 app.get('/health', (_, res) => res.json({ ok: true }));
 
+// ------------------- Helper -------------------
+function escapeXml(unsafe) {
+  return String(unsafe).replace(/[<>&'"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'})[c]);
+}
+
 // ------------------- Start Server -------------------
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
