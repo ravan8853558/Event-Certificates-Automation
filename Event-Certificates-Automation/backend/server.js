@@ -173,21 +173,22 @@ app.post("/api/submit/:eventId", async (req, res) => {
 
     const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
     const meta = await sharp(tplFull).metadata();
-    const tplW = meta.width,
-      tplH = meta.height;
+    const tplW = meta.width, tplH = meta.height;
 
-    // Scaling ratios between preview (1100x850) and actual template
-    const scaleX = tplW / 1100;
-    const scaleY = tplH / 850;
+    // 🔥 FIX: Match exact scaling with preview (1100x850)
+    const PREVIEW_W = 1100;
+    const PREVIEW_H = 850;
+    const scaleX = tplW / PREVIEW_W;
+    const scaleY = tplH / PREVIEW_H;
 
     // Convert normalized coords to actual pixels
-    const nbx = ev.nameBoxX * tplW;
-    const nby = ev.nameBoxY * tplH;
-    const nbw = ev.nameBoxW * tplW;
-    const nbh = ev.nameBoxH * tplH;
-    const qx = ev.qrX * tplW;
-    const qy = ev.qrY * tplH;
-    const qsize = ev.qrSize * tplW;
+    const nbx = ev.nameBoxX * PREVIEW_W * scaleX;
+    const nby = ev.nameBoxY * PREVIEW_H * scaleY;
+    const nbw = ev.nameBoxW * PREVIEW_W * scaleX;
+    const nbh = ev.nameBoxH * PREVIEW_H * scaleY;
+    const qx = ev.qrX * PREVIEW_W * scaleX;
+    const qy = ev.qrY * PREVIEW_H * scaleY;
+    const qsize = ev.qrSize * PREVIEW_W * scaleX;
 
     // Generate QR
     const qrText = `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`;
@@ -295,34 +296,14 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
     const rows = await db.all("SELECT * FROM responses WHERE event_id=?", id);
 
     const csvHead = [
-      "id",
-      "name",
-      "email",
-      "mobile",
-      "dept",
-      "year",
-      "enroll",
-      "cert_path",
-      "email_status",
-      "email_error",
-      "created_at",
+      "id","name","email","mobile","dept","year","enroll",
+      "cert_path","email_status","email_error","created_at"
     ];
     const csv = [csvHead.join(",")];
     rows.forEach((r) =>
       csv.push(
-        [
-          r.id,
-          `"${r.name}"`,
-          r.email,
-          r.mobile,
-          r.dept,
-          r.year,
-          r.enroll,
-          r.cert_path,
-          r.email_status,
-          `"${r.email_error}"`,
-          r.created_at,
-        ].join(",")
+        [r.id, `"${r.name}"`, r.email, r.mobile, r.dept, r.year, r.enroll,
+         r.cert_path, r.email_status, `"${r.email_error}"`, r.created_at].join(",")
       )
     );
     const csvBuf = Buffer.from(csv.join("\n"));
@@ -371,13 +352,7 @@ app.get("/form/:id", async (req, res) => {
 // ========== Helpers ==========
 function escapeXml(unsafe) {
   return unsafe.replace(/[<>&'"]/g, (c) =>
-    ({
-      "<": "&lt;",
-      ">": "&gt;",
-      "&": "&amp;",
-      "'": "&apos;",
-      '"': "&quot;",
-    }[c])
+    ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c])
   );
 }
 
