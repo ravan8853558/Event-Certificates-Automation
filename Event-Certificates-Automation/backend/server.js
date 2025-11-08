@@ -187,11 +187,11 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const nbh = ev.nameBoxH * tplH;
 
     // ✅ Font fix: smaller scaling, perfect centering
-    const scaledFontSize = (ev.nameFontSize || 48) * scaleY * 0.65;
+    const scaledFontSize = (ev.nameFontSize || 48) * scaleY * 0.58;
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
     const textX = textAnchor === "start" ? 0 : textAnchor === "end" ? nbw : nbw / 2;
-    const textY = nbh / 2 + scaledFontSize * 0.2;
+    const textY = nbh / 2 + scaledFontSize * 0.4;
 
     // ✅ QR perfect alignment bottom-right (fixed 50px)
     const qrSize = 50;
@@ -346,5 +346,6 @@ app.get("/api/test", (_, res) =>
 );
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
 
 
