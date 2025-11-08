@@ -32,8 +32,7 @@ const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
-const clampNum = (v, min, max) =>
-  Math.max(min, Math.min(max, parseFloat(v || 0)));
+const clampNum = (v, min, max) => Math.max(min, Math.min(max, parseFloat(v || 0)));
 
 // ========== Multer ==========
 const storage = multer.diskStorage({
@@ -81,7 +80,7 @@ function generateToken() {
   return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: "12h" });
 }
 function authMiddleware(req, res, next) {
-  let token = req.headers.authorization?.split(" ")[1] || req.query.token;
+  const token = req.headers.authorization?.split(" ")[1] || req.query.token;
   if (!token) return res.status(401).json({ error: "Unauthorized" });
   try {
     jwt.verify(token, JWT_SECRET);
@@ -90,6 +89,7 @@ function authMiddleware(req, res, next) {
     res.status(401).json({ error: "Invalid token" });
   }
 }
+
 app.post("/api/admin/login", (req, res) => {
   const { username, password } = req.body;
   if (username === ADMIN_USER && password === ADMIN_PASS)
@@ -178,7 +178,6 @@ app.post("/api/submit/:eventId", async (req, res) => {
 
     // Proper scaling based on preview reference
     const PREVIEW_W = 1100, PREVIEW_H = 850;
-    const scaleX = tplW / PREVIEW_W;
     const scaleY = tplH / PREVIEW_H;
 
     // Name box in actual pixels
@@ -187,17 +186,16 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const nbw = ev.nameBoxW * tplW;
     const nbh = ev.nameBoxH * tplH;
 
-    // 🔹 Font fix: smaller scaling, tighter vertical center
-    const scaledFontSize = (ev.nameFontSize || 36) * scaleY * 0.8;
+    // ✅ Font fix: smaller scaling, perfect centering
+    const scaledFontSize = (ev.nameFontSize || 36) * scaleY * 0.78;
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
-    const textX =
-      textAnchor === "start" ? 0 : textAnchor === "end" ? nbw : nbw / 2;
-    const textY = nbh / 2 + scaledFontSize * 0.25;
+    const textX = textAnchor === "start" ? 0 : textAnchor === "end" ? nbw : nbw / 2;
+    const textY = nbh / 2 + scaledFontSize * 0.2;
 
-    // 🔹 Fixed QR: bottom-right, slightly further out
+    // ✅ QR perfect alignment bottom-right (fixed 50px)
     const qrSize = 50;
-    const qrMargin = 40; // shift right/down more
+    const qrMargin = 50;
     const qrBuffer = await QRCode.toBuffer(
       `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
       { type: "png", width: qrSize }
@@ -205,7 +203,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const qrX = tplW - qrSize - qrMargin;
     const qrY = tplH - qrSize - qrMargin;
 
-    // Name SVG
+    // Create name SVG
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
         <style>
@@ -236,23 +234,8 @@ app.post("/api/submit/:eventId", async (req, res) => {
     await db.run(
       `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
        VALUES (?,?,?,?,?,?,?,?,?)`,
-      eId,
-      name,
-      email,
-      mobile,
-      dept,
-      year,
-      enroll,
-      certRel,
-      "generated"
+      eId, name, email, mobile, dept, year, enroll, certRel, "generated"
     );
-
-    res.json({ success: true, certPath: certRel });
-  } catch (err) {
-    console.error("Generation Error:", err);
-    res.status(500).json({ error: "Server error", details: err.message });
-  }
-});
 
     // ✅ Send mail asynchronously
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
@@ -273,17 +256,14 @@ app.post("/api/submit/:eventId", async (req, res) => {
           });
           await db.run(
             `UPDATE responses SET email_status='sent' WHERE email=? AND event_id=?`,
-            email,
-            eId
+            email, eId
           );
           console.log(`✅ Mail sent to ${email}`);
         } catch (mailErr) {
           console.error("Mail Error:", mailErr.message);
           await db.run(
             `UPDATE responses SET email_status='failed', email_error=? WHERE email=? AND event_id=?`,
-            mailErr.message,
-            email,
-            eId
+            mailErr.message, email, eId
           );
         }
       })();
@@ -295,7 +275,6 @@ app.post("/api/submit/:eventId", async (req, res) => {
     res.status(500).json({ error: "Server error", details: err.message });
   }
 });
-
 
 // ========== Download Event Data ==========
 app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
@@ -367,5 +346,3 @@ app.get("/api/test", (_, res) =>
 );
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-
-
