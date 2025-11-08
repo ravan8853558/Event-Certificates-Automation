@@ -4,18 +4,18 @@
 
 require('dotenv').config();
 const express = require('express');
-const multer = require('multer');
-const fs = require('fs');
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
+const cors = require('cors');
+const multer = require('multer');
+const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const sharp = require('sharp');
 const QRCode = require('qrcode');
-const nodemailer = require('nodemailer');
-const jwt = require('jsonwebtoken');
 const archiver = require('archiver');
 const { v4: uuidv4 } = require('uuid');
-const bodyParser = require('body-parser');
-const cors = require('cors');
+const sqlite3 = require('sqlite3').verbose();
+const { open } = require('sqlite');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
@@ -314,5 +314,6 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 
 // ========== Start ==========
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
