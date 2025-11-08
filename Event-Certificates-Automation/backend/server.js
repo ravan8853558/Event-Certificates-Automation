@@ -7,7 +7,6 @@ const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const sqlite3 = require('sqlite3');
 const sqlite3 = require('sqlite3').verbose();
 const sharp = require('sharp');
 const QRCode = require('qrcode');
@@ -315,4 +314,5 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 
 // ========== Start ==========
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
