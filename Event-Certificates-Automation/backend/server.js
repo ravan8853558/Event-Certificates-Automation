@@ -392,8 +392,67 @@ app.get("/verify", async (req, res) => {
   `);
 });
 
+// ========= DOWNLOAD EVENT DATA (Excel or ZIP) =========
+app.get("/api/download-data/:eventId", authMiddleware, async (req, res) => {
+  try {
+    const eId = parseInt(req.params.eventId);
+    const event = await db.get("SELECT * FROM events WHERE id=?", eId);
+    if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const responses = await db.all(
+      "SELECT name, email, mobile, dept, year, enroll, cert_path, email_status, created_at FROM responses WHERE event_id=?",
+      eId
+    );
+
+    if (responses.length === 0)
+      return res.status(404).json({ error: "No responses found for this event" });
+
+    // === Create a ZIP containing all certificates + CSV data ===
+    const zipFile = path.join(TEMP_DIR, `event_${eId}_data.zip`);
+    const output = fs.createWriteStream(zipFile);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    output.on("close", () => {
+      res.download(zipFile, `event_${eId}_data.zip`, (err) => {
+        if (err) console.error("Download error:", err);
+        fs.unlink(zipFile, () => {}); // cleanup temp file
+      });
+    });
+
+    archive.on("error", (err) => {
+      throw err;
+    });
+
+    archive.pipe(output);
+
+    // Add all certificates to ZIP
+    for (const r of responses) {
+      const certFull = path.join(__dirname, r.cert_path.replace(/^\//, ""));
+      if (fs.existsSync(certFull)) {
+        archive.file(certFull, { name: `${r.name.replace(/[^\w]/g, "_")}.png` });
+      }
+    }
+
+    // Create CSV data
+    const csvHeader = "Name,Email,Mobile,Dept,Year,Enroll,Certificate,EmailStatus,CreatedAt\n";
+    const csvRows = responses.map(r =>
+      `${r.name},${r.email},${r.mobile},${r.dept},${r.year},${r.enroll},${r.cert_path},${r.email_status},${r.created_at}`
+    );
+    const csvData = csvHeader + csvRows.join("\n");
+
+    // Add CSV file into ZIP
+    archive.append(csvData, { name: "event_data.csv" });
+
+    await archive.finalize();
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).json({ error: "Failed to generate event data", details: err.message });
+  }
+});
+
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
