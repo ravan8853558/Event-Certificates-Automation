@@ -1,7 +1,7 @@
 // ===============================
 // UEM Event Certificates - Backend (FINAL STABLE BUILD ✅)
 // ===============================
-
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 require("dotenv").config();
 const express = require("express");
 const path = require("path");
@@ -26,17 +26,6 @@ const JWT_SECRET = process.env.JWT_SECRET || "cheakstar_secure_secret";
 const ADMIN_USER = process.env.ADMIN_USER || "admin@uem.com";
 const ADMIN_PASS = process.env.ADMIN_PASS || "UEM@12345";
 const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
-
-// ====== EMAIL CONFIG ======
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false, // true if port 465
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
 
 // ====== PATHS ======
 const UPLOAD_DIR = path.join(__dirname, "uploads");
@@ -376,9 +365,10 @@ await sharp(tplFull)
   }
 
   return certRel;
-
+}
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
