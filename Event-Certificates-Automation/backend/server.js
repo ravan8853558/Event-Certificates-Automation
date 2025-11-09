@@ -10,15 +10,12 @@ const cors = require("cors");
 const multer = require("multer");
 const bodyParser = require("body-parser");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
 const sharp = require("sharp");
 const QRCode = require("qrcode");
 const archiver = require("archiver");
 const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
-const xlsx = require("xlsx");
-const csv = require("csv-parser");
 
 // ====== ENV ======
 const PORT = process.env.PORT || 10000;
@@ -368,6 +365,7 @@ await sharp(tplFull)
 }
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
