@@ -163,6 +163,30 @@ app.get("/api/events", authMiddleware, async (_, res) => {
   }
 });
 
+// ========= PUBLIC FORM =========
+app.get("/form/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const ev = await db.get("SELECT * FROM events WHERE id=?", id);
+  if (!ev) return res.status(404).send("Event not found");
+
+  res.send(`
+  <!doctype html>
+  <html><head><meta charset="utf-8"><title>${ev.name}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"></head>
+  <body class="bg-light"><div class="container py-5">
+  <div class="card shadow-lg p-4 mx-auto" style="max-width:700px">
+  <h3>${ev.name}</h3><p class="text-muted">${ev.orgBy} • ${ev.date}</p>
+  <form method="POST" action="/api/submit/${ev.id}">
+    <input name="name" placeholder="Full Name" required class="form-control mb-2">
+    <input name="email" type="email" placeholder="Email" required class="form-control mb-2">
+    <input name="mobile" placeholder="Mobile" class="form-control mb-2">
+    <input name="dept" placeholder="Department" class="form-control mb-2">
+    <input name="year" placeholder="Year" class="form-control mb-2">
+    <input name="enroll" placeholder="Enrollment No" class="form-control mb-3">
+    <button class="btn btn-primary w-100">Generate Certificate</button>
+  </form></div></div></body></html>`);
+});
+
 // ========= PUBLIC FORM SUBMIT =========
 app.post("/api/submit/:eventId", bodyParser.urlencoded({ extended: true }), async (req, res) => {
   try {
@@ -329,6 +353,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
