@@ -276,9 +276,9 @@ scaledFont = Math.round(scaledFont);
   
 // 🟢 Bottom-right safe placement inside template
   
-  const padding = tplW * 0.02; // 2% inward margin from edges
-  const qrX = tplW - qrSizePx - padding;
-  const qrY = tplH - qrSizePx - padding;
+  const padding = Math.round(tplW * 0.02); // 2% inward margin (rounded)
+  const qrX = Math.round(tplW - qrSizePx - padding);
+  const qrY = Math.round(tplH - qrSizePx - padding);
 
   // --- Adjust SVG centering relative to name box ---
   const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
@@ -288,13 +288,13 @@ scaledFont = Math.round(scaledFont);
   const certFile = `${Date.now()}-${uuidv4()}.png`;
   const certFull = path.join(CERTS_DIR, certFile);
 
-  await sharp(tplFull)
-    .composite([
-      { input: svgBuf, left: svgLeft, top: svgTop },
-      { input: qrBuffer, left: qrX, top: qrY }
-    ])
-    .png()
-    .toFile(certFull);
+await sharp(tplFull)
+  .composite([
+    { input: svgBuf, left: Math.round(svgLeft), top: Math.round(svgTop) },
+    { input: qrBuffer, left: Math.round(qrX), top: Math.round(qrY) }
+  ])
+  .png()
+  .toFile(certFull);
 
   const certRel = `/uploads/certs/${certFile}`;
 
@@ -372,6 +372,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
