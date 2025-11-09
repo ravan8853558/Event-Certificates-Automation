@@ -77,7 +77,20 @@ let db;
 
 // ====== EXPRESS ======
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "authorization",
+      "Origin",
+      "Accept",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  })
+);
+
 app.use(bodyParser.json({ limit: "25mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
@@ -309,3 +322,4 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
