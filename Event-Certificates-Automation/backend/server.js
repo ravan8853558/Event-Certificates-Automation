@@ -80,13 +80,7 @@ const app = express();
 app.use(
   cors({
     origin: "*",
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "authorization",
-      "Origin",
-      "Accept",
-    ],
+    allowedHeaders: ["Content-Type", "Authorization", "authorization"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   })
 );
@@ -322,4 +316,5 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
 
