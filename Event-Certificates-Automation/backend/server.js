@@ -1,5 +1,5 @@
 // ===============================
-// UEM Event Certificates - Final Backend (Perfect Alignment + Working Mail)
+// UEM Event Certificates - Final Backend (Stable + Email + Export)
 // ===============================
 
 require("dotenv").config();
@@ -24,7 +24,7 @@ const ADMIN_USER = process.env.ADMIN_USER || "admin@uem.com";
 const ADMIN_PASS = process.env.ADMIN_PASS || "UEM@12345";
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Paths
+// ====== Folders ======
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const TEMPLATES_DIR = path.join(UPLOAD_DIR, "templates");
 const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
@@ -34,7 +34,7 @@ const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
 
 const clampNum = (v, min, max) => Math.max(min, Math.min(max, parseFloat(v || 0)));
 
-// ========== Multer ==========
+// ====== Multer ======
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, TEMPLATES_DIR),
   filename: (_, file, cb) =>
@@ -42,7 +42,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ========== Database ==========
+// ====== Database ======
 let db;
 (async () => {
   db = await open({
@@ -69,13 +69,13 @@ let db;
   console.log("✅ Database ready.");
 })();
 
-// ========== App Setup ==========
+// ====== Express Setup ======
 const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: "15mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
-// ========== Auth ==========
+// ====== Auth ======
 function generateToken() {
   return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: "12h" });
 }
@@ -97,7 +97,7 @@ app.post("/api/admin/login", (req, res) => {
   res.status(401).json({ error: "Invalid credentials" });
 });
 
-// ========== Upload Template ==========
+// ====== Upload Template ======
 app.post("/api/upload-template", upload.single("template"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -114,7 +114,7 @@ app.post("/api/upload-template", upload.single("template"), async (req, res) => 
   }
 });
 
-// ========== Create Event ==========
+// ====== Create Event ======
 app.post("/api/events", authMiddleware, async (req, res) => {
   try {
     const p = req.body;
@@ -151,7 +151,7 @@ app.post("/api/events", authMiddleware, async (req, res) => {
   }
 });
 
-// ========== Generate Certificate ==========
+// ====== Generate Certificate ======
 app.post("/api/submit/:eventId", async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -166,21 +166,21 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const meta = await sharp(tplFull).metadata();
     const tplW = meta.width, tplH = meta.height;
 
-    // Scaling
     const PREVIEW_W = 1100, PREVIEW_H = 850;
     const scaleY = tplH / PREVIEW_H;
 
-    // Name box
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
     const nbh = ev.nameBoxH * tplH;
 
-    // ✅ Expanded SVG box to prevent cropping
     const expandedW = nbw * 1.8;
     const expandedH = nbh * 2.0;
 
-    const scaledFontSize = (ev.nameFontSize || 48) * scaleY;
+    const baseFont = Math.max(10, Math.round((ev.nameFontSize || 48) * scaleY));
+    const maxChars = 28;
+    const scaledFontSize = name.length > maxChars ? baseFont * (maxChars / name.length) : baseFont;
+
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
 
@@ -208,9 +208,8 @@ app.post("/api/submit/:eventId", async (req, res) => {
 
     const svgBuf = Buffer.from(svg);
 
-    // ✅ QR bottom-right alignment
-    const qrSize = 50;
-    const qrMargin = 30;
+    // ---- QR bottom-right ----
+    const qrSize = 50, qrMargin = 30;
     const qrBuffer = await QRCode.toBuffer(
       `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
       { type: "png", width: qrSize }
@@ -218,13 +217,17 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const qrX = tplW - qrSize - qrMargin;
     const qrY = tplH - qrSize - qrMargin;
 
+    // ---- Center expanded SVG properly ----
+    const svgLeft = nbx - (expandedW - nbw) / 2;
+    const svgTop = nby - (expandedH - nbh) / 2;
+
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
 
     await sharp(tplFull)
       .composite([
-        { input: svgBuf, top: Math.round(nby - nbh * 0.5), left: Math.round(nbx - nbw * 0.4) },
-        { input: qrBuffer, top: qrY, left: qrX },
+        { input: svgBuf, left: Math.round(svgLeft), top: Math.round(svgTop) },
+        { input: qrBuffer, left: qrX, top: qrY },
       ])
       .png()
       .toFile(certFull);
@@ -236,6 +239,41 @@ app.post("/api/submit/:eventId", async (req, res) => {
       eId, name, email, mobile, dept, year, enroll, certRel, "generated"
     );
 
+    // ---- Send Email ----
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    try {
+      await transporter.sendMail({
+        from: process.env.FROM_EMAIL,
+        to: email,
+        subject: `Your Certificate - ${ev.name}`,
+        text: `Hello ${name},\n\nAttached is your participation certificate for "${ev.name}" held on ${ev.date}.`,
+        attachments: [{ filename: "certificate.png", path: certFull }],
+      });
+
+      await db.run(
+        "UPDATE responses SET email_status = 'sent' WHERE event_id = ? AND email = ?",
+        eId,
+        email
+      );
+    } catch (errMail) {
+      await db.run(
+        "UPDATE responses SET email_status = 'failed', email_error = ? WHERE event_id = ? AND email = ?",
+        errMail.message,
+        eId,
+        email
+      );
+      console.error("Email failed:", errMail.message);
+    }
+
     res.json({ success: true, certPath: certRel });
   } catch (err) {
     console.error("Generation Error:", err);
@@ -243,7 +281,48 @@ app.post("/api/submit/:eventId", async (req, res) => {
   }
 });
 
-// ========== Helpers ==========
+// ====== Download Data (CSV + ZIP) ======
+app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id);
+    const responses = await db.all("SELECT * FROM responses WHERE event_id = ?", eventId);
+    if (!responses.length) return res.status(404).json({ error: "No data found" });
+
+    const zipName = `event_${eventId}_${Date.now()}.zip`;
+    const zipPath = path.join(__dirname, zipName);
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    output.on("close", () => {
+      res.download(zipPath, zipName, () => fs.unlinkSync(zipPath));
+    });
+
+    archive.pipe(output);
+    archive.append(
+      "Name,Email,Mobile,Dept,Year,Enroll,CertPath\n" +
+        responses
+          .map(
+            (r) =>
+              `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${r.cert_path}"`
+          )
+          .join("\n"),
+      { name: "data.csv" }
+    );
+
+    responses.forEach((r) => {
+      const certPath = path.join(__dirname, r.cert_path.replace(/^\//, ""));
+      if (fs.existsSync(certPath))
+        archive.file(certPath, { name: `certificates/${r.name.replace(/[^\w]/g, "_")}.png` });
+    });
+
+    await archive.finalize();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to build zip", details: err.message });
+  }
+});
+
+// ====== Misc ======
 function escapeXml(unsafe) {
   return unsafe.replace(/[<>&'"]/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c])
