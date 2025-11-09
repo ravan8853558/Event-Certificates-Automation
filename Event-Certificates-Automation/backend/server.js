@@ -221,7 +221,7 @@ async function generateCertificate(ev, data) {
   // --- Name box positioning ---
   const nbx = ev.nameBoxX * tplW;
   const nby = ev.nameBoxY * tplH;
-  const nbw = ev.nameBoxW * tplW;
+  const nbw = ev.nameBoxW * tplW * 1.2;
   const nbh = ev.nameBoxH * tplH;
 
   // --- Expand text box slightly to avoid clipping ---
@@ -257,7 +257,7 @@ scaledFont = Math.round(scaledFont);
 
   // --- Bigger and cleaner QR (easy to scan) ---
   
-  let qrSizePx = Math.round((ev.qrSize || 0.14) * tplW);
+  let qrSizePx = Math.round((ev.qrSize || 0.18) * tplW);
   qrSizePx = Math.min(Math.max(qrSizePx, 100), tplW * 0.12);
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
@@ -367,6 +367,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
