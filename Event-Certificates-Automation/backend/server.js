@@ -282,7 +282,7 @@ app.post("/api/submit/:eventId", async (req, res) => {
     // QR
     const qrSizePx = Math.max(40, Math.round((ev.qrSize || 0.05) * tplW));
     const qrBuffer = await QRCode.toBuffer(
-      `This is to Certify That ${escapeXml(name)} participated in ${escapeXml(ev.name)} organized by ${escapeXml(ev.orgBy)} (on ${escapeXml(ev.date)})`,
+      `${escapeXml(name)} participated in ${escapeXml(ev.name)} organized by ${escapeXml(ev.orgBy)} on (${escapeXml(ev.date)})`,
       { type: "png", width: qrSizePx }
     );
     const qrX = Math.round(ev.qrX * tplW);
@@ -378,4 +378,5 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running on port ${PORT}`));
+
 
