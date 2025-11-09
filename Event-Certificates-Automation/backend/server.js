@@ -1,5 +1,5 @@
 // ===============================
-// UEM Event Certificates - Backend (Final Stable Build)
+// UEM Event Certificates - Backend (FINAL WORKING BUILD)
 // ===============================
 
 require("dotenv").config();
@@ -18,14 +18,14 @@ const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
 
-// ====== Environment Vars ======
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
+// ====== ENV ======
+const PORT = process.env.PORT || 10000;
+const JWT_SECRET = process.env.JWT_SECRET || "cheakstar_secure_secret";
 const ADMIN_USER = process.env.ADMIN_USER || "admin@uem.com";
 const ADMIN_PASS = process.env.ADMIN_PASS || "UEM@12345";
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// ====== Paths ======
+// ====== DIRECTORIES ======
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const TEMPLATES_DIR = path.join(UPLOAD_DIR, "templates");
 const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
@@ -33,14 +33,14 @@ const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
-// ====== Helpers ======
+// ====== HELPERS ======
 const clamp = (v, min, max) => Math.max(min, Math.min(max, parseFloat(v || 0)));
 const escapeXml = (unsafe) =>
   unsafe.replace(/[<>&'"]/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c])
   );
 
-// ====== Multer Setup ======
+// ====== MULTER ======
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, TEMPLATES_DIR),
   filename: (_, file, cb) =>
@@ -48,14 +48,13 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ====== SQLite Setup ======
+// ====== SQLITE ======
 let db;
 (async () => {
   db = await open({
     filename: path.join(__dirname, "data.db"),
     driver: sqlite3.Database,
   });
-
   await db.exec(`
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,25 +75,28 @@ let db;
   console.log("✅ Database initialized");
 })();
 
-// ====== Express App ======
+// ====== EXPRESS ======
 const app = express();
 app.use(cors());
-app.use(bodyParser.json({ limit: "20mb" }));
+app.use(bodyParser.json({ limit: "25mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
-// ====== Auth ======
+// ====== AUTH ======
 function generateToken() {
   return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: "12h" });
 }
+
 function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.split(" ")[1] || req.query.token;
+  const token =
+    req.headers.authorization?.split(" ")[1] ||
+    req.query.token ||
+    req.body.token;
   if (!token) return res.status(401).json({ error: "Unauthorized - No token" });
   try {
     jwt.verify(token, JWT_SECRET);
     next();
-  } catch (err) {
-    console.error("JWT error:", err.message);
-    return res.status(401).json({ error: "Invalid token" });
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
 
@@ -105,7 +107,12 @@ app.post("/api/admin/login", (req, res) => {
   return res.status(401).json({ error: "Invalid credentials" });
 });
 
-// ====== Upload Template ======
+// ====== TEST ROUTE ======
+app.get("/api/test", (_, res) =>
+  res.json({ success: true, message: "Backend OK" })
+);
+
+// ====== UPLOAD TEMPLATE ======
 app.post("/api/upload-template", upload.single("template"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -117,12 +124,12 @@ app.post("/api/upload-template", upload.single("template"), async (req, res) => 
       height: meta.height,
     });
   } catch (err) {
-    console.error("Upload Error:", err);
-    return res.status(500).json({ error: "Upload failed", details: err.message });
+    console.error("Upload Error:", err.message);
+    return res.status(500).json({ error: "Upload failed" });
   }
 });
 
-// ====== Create Event ======
+// ====== CREATE EVENT ======
 app.post("/api/events", authMiddleware, async (req, res) => {
   try {
     const p = req.body;
@@ -148,29 +155,30 @@ app.post("/api/events", authMiddleware, async (req, res) => {
       clamp(p.qrY, 0, 1),
       clamp(p.qrSize, 0.01, 1)
     );
+
     return res.json({
       success: true,
       eventId: stmt.lastID,
       formLink: `${BASE_URL}/form/${stmt.lastID}`,
     });
   } catch (err) {
-    console.error("Event Creation Error:", err);
-    return res.status(500).json({ error: "Failed to create event", details: err.message });
+    console.error("Create Event Error:", err.message);
+    return res.status(500).json({ error: "Failed to create event" });
   }
 });
 
-// ====== List Events ======
+// ====== GET EVENTS ======
 app.get("/api/events", authMiddleware, async (_, res) => {
   try {
-    const events = await db.all("SELECT * FROM events ORDER BY id DESC");
-    return res.json({ success: true, data: events });
+    const rows = await db.all("SELECT * FROM events ORDER BY id DESC");
+    return res.json({ success: true, data: rows });
   } catch (err) {
-    console.error("Fetch Events Error:", err);
+    console.error("Events Fetch Error:", err.message);
     return res.status(500).json({ error: "Failed to fetch events" });
   }
 });
 
-// ====== Generate Certificate ======
+// ====== GENERATE CERTIFICATE ======
 app.post("/api/submit/:eventId", async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -178,76 +186,57 @@ app.post("/api/submit/:eventId", async (req, res) => {
     if (!ev) return res.status(404).json({ error: "Event not found" });
 
     const { name, email, mobile, dept, year, enroll } = req.body;
-    if (!name || !email) return res.status(400).json({ error: "Missing name/email" });
+    if (!name || !email)
+      return res.status(400).json({ error: "Missing name/email" });
 
     const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
     const meta = await sharp(tplFull).metadata();
     const tplW = meta.width,
       tplH = meta.height;
 
-    const PREVIEW_W = 1100,
-      PREVIEW_H = 850;
-    const scaleY = tplH / PREVIEW_H;
-
+    // Text box calculations
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
     const nbh = ev.nameBoxH * tplH;
 
-    const expandedW = nbw * 1.8;
-    const expandedH = nbh * 2.0;
-
-    const baseFont = Math.max(10, Math.round((ev.nameFontSize || 48) * scaleY));
-    const maxChars = 28;
-    const scaledFont = name.length > maxChars ? baseFont * (maxChars / name.length) : baseFont;
-
+    const fontSize = ev.nameFontSize || 48;
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
-    const textX =
-      textAnchor === "start"
-        ? scaledFont * 0.6
-        : textAnchor === "end"
-        ? expandedW - scaledFont * 0.6
-        : expandedW / 2;
-    const textY = expandedH / 2 + scaledFont * 0.3;
 
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${expandedW}" height="${expandedH}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
         <style>
           .t {
             font-family: '${ev.nameFontFamily}', sans-serif;
-            font-size: ${scaledFont}px;
+            font-size: ${fontSize}px;
             fill: ${ev.nameFontColor};
             font-weight: 600;
           }
         </style>
-        <text x="${textX}" y="${textY}" text-anchor="${textAnchor}"
-              dominant-baseline="middle" class="t">${escapeXml(name)}</text>
+        <text x="50%" y="50%" text-anchor="${textAnchor}" dominant-baseline="middle" class="t">
+          ${escapeXml(name)}
+        </text>
       </svg>`;
-
     const svgBuf = Buffer.from(svg);
 
-    // ---- QR Code ----
-    const qrSize = 50,
-      qrMargin = 30;
+    // QR bottom-right
+    const qrSize = ev.qrSize * tplW;
     const qrBuffer = await QRCode.toBuffer(
-      `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
-      { type: "png", width: qrSize }
+      `${name} - ${ev.name} - ${ev.orgBy} (${ev.date})`,
+      { type: "png", width: Math.max(40, Math.round(qrSize)) }
     );
-    const qrX = tplW - qrSize - qrMargin;
-    const qrY = tplH - qrSize - qrMargin;
+    const qrX = ev.qrX * tplW;
+    const qrY = ev.qrY * tplH;
 
-    // ---- Composite ----
-    const svgLeft = nbx - (expandedW - nbw) / 2;
-    const svgTop = nby - (expandedH - nbh) / 2;
-
+    // Composite
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
 
     await sharp(tplFull)
       .composite([
-        { input: svgBuf, left: Math.round(svgLeft), top: Math.round(svgTop) },
-        { input: qrBuffer, left: qrX, top: qrY },
+        { input: svgBuf, left: Math.round(nbx), top: Math.round(nby) },
+        { input: qrBuffer, left: Math.round(qrX), top: Math.round(qrY) },
       ])
       .png()
       .toFile(certFull);
@@ -267,59 +256,31 @@ app.post("/api/submit/:eventId", async (req, res) => {
       "generated"
     );
 
-    // ---- Send Email ----
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: false,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
-    try {
-      await transporter.sendMail({
-        from: process.env.FROM_EMAIL,
-        to: email,
-        subject: `Your Certificate - ${ev.name}`,
-        text: `Hello ${name},\n\nAttached is your participation certificate for "${ev.name}" held on ${ev.date}.`,
-        attachments: [{ filename: "certificate.png", path: certFull }],
-      });
-      await db.run(
-        "UPDATE responses SET email_status='sent' WHERE event_id=? AND email=?",
-        eId,
-        email
-      );
-    } catch (errMail) {
-      console.error("Email failed:", errMail.message);
-      await db.run(
-        "UPDATE responses SET email_status='failed', email_error=? WHERE event_id=? AND email=?",
-        errMail.message,
-        eId,
-        email
-      );
-    }
-
-    return res.json({ success: true, certPath: certRel });
+    res.json({ success: true, certPath: certRel });
   } catch (err) {
-    console.error("Generation Error:", err);
-    return res.status(500).json({ error: "Server error", details: err.message });
+    console.error("Cert Generation Error:", err.message);
+    res.status(500).json({ error: "Failed to generate certificate" });
   }
 });
 
-// ====== Download ZIP + CSV ======
+// ====== DOWNLOAD DATA ======
 app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id);
     const responses = await db.all("SELECT * FROM responses WHERE event_id = ?", eventId);
-    if (!responses.length) return res.status(404).json({ error: "No data found" });
+    if (!responses.length)
+      return res.status(404).json({ error: "No data found" });
 
     const zipName = `event_${eventId}_${Date.now()}.zip`;
     const zipPath = path.join(__dirname, zipName);
     const output = fs.createWriteStream(zipPath);
     const archive = archiver("zip", { zlib: { level: 9 } });
 
-    output.on("close", () => res.download(zipPath, zipName, () => fs.unlinkSync(zipPath)));
-    archive.pipe(output);
+    output.on("close", () => {
+      res.download(zipPath, zipName, () => fs.unlinkSync(zipPath));
+    });
 
-    // Add CSV
+    archive.pipe(output);
     archive.append(
       "Name,Email,Mobile,Dept,Year,Enroll,CertPath\n" +
         responses
@@ -331,22 +292,20 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
       { name: "data.csv" }
     );
 
-    // Add certificate files
     responses.forEach((r) => {
       const certPath = path.join(__dirname, r.cert_path.replace(/^\//, ""));
       if (fs.existsSync(certPath))
-        archive.file(certPath, { name: `certificates/${r.name.replace(/[^\w]/g, "_")}.png` });
+        archive.file(certPath, {
+          name: `certificates/${r.name.replace(/[^\w]/g, "_")}.png`,
+        });
     });
 
     await archive.finalize();
   } catch (err) {
-    console.error("ZIP Error:", err);
-    return res.status(500).json({ error: "Failed to build zip", details: err.message });
+    console.error("ZIP Error:", err.message);
+    res.status(500).json({ error: "Failed to export data" });
   }
 });
 
-// ====== Test Route ======
-app.get("/api/test", (_, res) => res.json({ success: true, message: "Backend OK" }));
-
-// ====== Start Server ======
+// ====== START SERVER ======
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
