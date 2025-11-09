@@ -151,17 +151,7 @@ app.post("/api/events", authMiddleware, async (req, res) => {
   }
 });
 
-// ========== List Events ==========
-app.get("/api/events", authMiddleware, async (_, res) => {
-  try {
-    const events = await db.all("SELECT * FROM events ORDER BY id DESC");
-    res.json({ success: true, data: events });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to load events" });
-  }
-});
-
-// ========== Generate Certificate + Mail ==========
+// ========== Generate Certificate ==========
 app.post("/api/submit/:eventId", async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -176,36 +166,34 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const meta = await sharp(tplFull).metadata();
     const tplW = meta.width, tplH = meta.height;
 
-    // Proper scaling based on preview reference
+    // Scaling
     const PREVIEW_W = 1100, PREVIEW_H = 850;
     const scaleY = tplH / PREVIEW_H;
 
-    // Name box in actual pixels
+    // Name box
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
     const nbh = ev.nameBoxH * tplH;
 
-    // ✅ Font fix: smaller scaling, perfect centering
-    const scaledFontSize = (ev.nameFontSize || 48) * scaleY * 0.58;
+    // ✅ Expanded SVG box to prevent cropping
+    const expandedW = nbw * 1.8;
+    const expandedH = nbh * 2.0;
+
+    const scaledFontSize = (ev.nameFontSize || 48) * scaleY;
     const alignMap = { left: "start", center: "middle", right: "end" };
     const textAnchor = alignMap[ev.nameAlign] || "middle";
-    const textX = textAnchor === "start" ? 0 : textAnchor === "end" ? nbw : nbw / 2;
-    const textY = nbh / 2 + scaledFontSize * 0.4;
 
-    // ✅ QR perfect alignment bottom-right (fixed 50px)
-    const qrSize = 50;
-    const qrMargin = 30;
-    const qrBuffer = await QRCode.toBuffer(
-      `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
-      { type: "png", width: qrSize }
-    );
-    const qrX = tplW - qrSize - qrMargin;
-    const qrY = tplH - qrSize - qrMargin;
+    const textX =
+      textAnchor === "start"
+        ? scaledFontSize * 0.6
+        : textAnchor === "end"
+        ? expandedW - scaledFontSize * 0.6
+        : expandedW / 2;
+    const textY = expandedH / 2 + scaledFontSize * 0.3;
 
-    // Create name SVG
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${expandedW}" height="${expandedH}">
         <style>
           .t {
             font-family: '${ev.nameFontFamily || "Poppins"}', sans-serif;
@@ -219,12 +207,23 @@ app.post("/api/submit/:eventId", async (req, res) => {
       </svg>`;
 
     const svgBuf = Buffer.from(svg);
+
+    // ✅ QR bottom-right alignment
+    const qrSize = 50;
+    const qrMargin = 30;
+    const qrBuffer = await QRCode.toBuffer(
+      `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
+      { type: "png", width: qrSize }
+    );
+    const qrX = tplW - qrSize - qrMargin;
+    const qrY = tplH - qrSize - qrMargin;
+
     const certFile = `${Date.now()}-${uuidv4()}.png`;
     const certFull = path.join(CERTS_DIR, certFile);
 
     await sharp(tplFull)
       .composite([
-        { input: svgBuf, top: Math.round(nby), left: Math.round(nbx) },
+        { input: svgBuf, top: Math.round(nby - nbh * 0.5), left: Math.round(nbx - nbw * 0.4) },
         { input: qrBuffer, top: qrY, left: qrX },
       ])
       .png()
@@ -237,101 +236,11 @@ app.post("/api/submit/:eventId", async (req, res) => {
       eId, name, email, mobile, dept, year, enroll, certRel, "generated"
     );
 
-    // ✅ Send mail asynchronously
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      (async () => {
-        try {
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-          });
-          await transporter.sendMail({
-            from: process.env.FROM_EMAIL || process.env.SMTP_USER,
-            to: email,
-            subject: `Your Certificate - ${ev.name}`,
-            text: `Dear ${name},\n\nPlease find attached your certificate for ${ev.name}.\n\nRegards,\n${ev.orgBy}`,
-            attachments: [{ filename: "certificate.png", path: certFull }],
-          });
-          await db.run(
-            `UPDATE responses SET email_status='sent' WHERE email=? AND event_id=?`,
-            email, eId
-          );
-          console.log(`✅ Mail sent to ${email}`);
-        } catch (mailErr) {
-          console.error("Mail Error:", mailErr.message);
-          await db.run(
-            `UPDATE responses SET email_status='failed', email_error=? WHERE email=? AND event_id=?`,
-            mailErr.message, email, eId
-          );
-        }
-      })();
-    }
-
     res.json({ success: true, certPath: certRel });
   } catch (err) {
     console.error("Generation Error:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
-});
-
-// ========== Download Event Data ==========
-app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const ev = await db.get("SELECT * FROM events WHERE id=?", id);
-    if (!ev) return res.status(404).json({ error: "Event not found" });
-    const rows = await db.all("SELECT * FROM responses WHERE event_id=?", id);
-
-    const csvHead = [
-      "id","name","email","mobile","dept","year","enroll",
-      "cert_path","email_status","email_error","created_at"
-    ];
-    const csv = [csvHead.join(",")];
-    rows.forEach((r) =>
-      csv.push(
-        [r.id, `"${r.name}"`, r.email, r.mobile, r.dept, r.year, r.enroll,
-         r.cert_path, r.email_status, `"${r.email_error}"`, r.created_at].join(",")
-      )
-    );
-    const csvBuf = Buffer.from(csv.join("\n"));
-
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename=event-${id}-data.zip`);
-    const zip = archiver("zip", { zlib: { level: 9 } });
-    zip.pipe(res);
-    zip.append(csvBuf, { name: `event-${id}-data.csv` });
-    rows.forEach((r) => {
-      if (r.cert_path) {
-        const f = path.join(__dirname, r.cert_path.replace(/^\//, ""));
-        if (fs.existsSync(f)) zip.file(f, { name: `certs/${path.basename(f)}` });
-      }
-    });
-    await zip.finalize();
-  } catch (err) {
-    res.status(500).json({ error: "Download failed", details: err.message });
-  }
-});
-
-// ========== Public Form ==========
-app.get("/form/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  const ev = await db.get("SELECT * FROM events WHERE id=?", id);
-  if (!ev) return res.status(404).send("Event not found");
-  res.send(`
-  <html><body style="font-family:sans-serif;padding:2rem;">
-    <h2>${ev.name}</h2>
-    <form method="POST" action="/api/submit/${id}">
-      <input name="name" placeholder="Name" required/><br/>
-      <input name="email" placeholder="Email" required/><br/>
-      <input name="mobile" placeholder="Mobile"/><br/>
-      <input name="dept" placeholder="Department"/><br/>
-      <input name="year" placeholder="Year"/><br/>
-      <input name="enroll" placeholder="Enrollment"/><br/>
-      <button type="submit">Submit</button>
-    </form>
-  </body></html>`);
 });
 
 // ========== Helpers ==========
@@ -346,6 +255,3 @@ app.get("/api/test", (_, res) =>
 );
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-
-
-
