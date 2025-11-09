@@ -306,6 +306,8 @@ await sharp(tplFull)
   try {
     const certBuffer = fs.readFileSync(certFull);
     const base64Cert = certBuffer.toString("base64");
+    console.log("📨 Sending certificate to:", email);
+    console.log("FROM:", process.env.FROM_EMAIL);
 
     const resSend = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -343,13 +345,13 @@ await sharp(tplFull)
       console.log(`📩 Certificate emailed instantly via Resend to ${email}`);
     } else {
       const errText = await resSend.text();
-      console.error("Resend error:", errText);
+      console.error("❌ Resend API Error:", errText);
       await db.run(
         `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
-        "failed",
-        errText,
-        certRel
-      );
+       "failed",
+     errText.slice(0, 255),  // Avoid DB overflow
+     certRel
+          );
     }
   } catch (err) {
     console.error("Email send failed:", err.message);
@@ -363,8 +365,36 @@ await sharp(tplFull)
 
   return certRel;
 }
+
+// ========= VERIFY CERTIFICATE =========
+app.get("/verify", async (req, res) => {
+  const { name, event } = req.query;
+  if (!name || !event)
+    return res.status(400).send("Missing parameters");
+
+  const ev = await db.get("SELECT * FROM events WHERE id=?", event);
+  const rec = await db.get(
+    "SELECT * FROM responses WHERE event_id=? AND LOWER(name)=LOWER(?)",
+    event,
+    name
+  );
+
+  if (!ev || !rec)
+    return res.status(404).send(`<h3>❌ Not Found</h3><p>No record for ${escapeXml(name)}</p>`);
+
+  res.send(`
+    <div style="font-family:sans-serif; text-align:center; margin-top:40px;">
+      <h2>✅ Verified Certificate</h2>
+      <p><b>${escapeXml(rec.name)}</b> participated in <b>${escapeXml(ev.name)}</b></p>
+      <p>Organized by: <b>${escapeXml(ev.orgBy)}</b> on <b>${escapeXml(ev.date)}</b></p>
+      <p><a href="${rec.cert_path}" target="_blank">View Certificate</a></p>
+    </div>
+  `);
+});
+
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
