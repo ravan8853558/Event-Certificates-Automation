@@ -252,7 +252,7 @@ async function generateCertificate(ev, data) {
   const svgBuf = Buffer.from(svg);
 
   // --- Bigger and cleaner QR (easy to scan) ---
-  const qrSizePx = Math.max(140, Math.round((ev.qrSize || 0.14) * tplW)); // increase clarity
+  const qrSizePx = Math.max(100, Math.round((ev.qrSize || 0.08) * tplW)); // increase clarity
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
     { width: qrSizePx, errorCorrectionLevel: "M", margin: 3 }
@@ -353,6 +353,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
