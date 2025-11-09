@@ -75,6 +75,18 @@ let db;
   console.log("✅ Database initialized");
 })();
 
+
+// Verify token health before reuse
+if (adminToken) {
+  const test = await fetch(api("/api/test"));
+  if (!test.ok) {
+    localStorage.removeItem("adminToken");
+    alert("Session expired, please log in again.");
+    return false;
+  }
+}
+
+
 // ====== EXPRESS ======
 const app = express();
 app.use(
@@ -318,4 +330,5 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 app.listen(PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${PORT}`)
 );
+
 
