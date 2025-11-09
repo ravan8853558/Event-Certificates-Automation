@@ -229,7 +229,7 @@ async function generateCertificate(ev, data) {
   const safeH = nbh * 2.0;
 
   // --- Font scaling logic (adaptive font size) ---
-const baseFont = Math.max(10, ev.nameFontSize || 44);
+const baseFont = Math.max(10, ev.nameFontSize || 36);
 let scaledFont = baseFont;
 
 if (name.length > 12) scaledFont = baseFont * 0.9;
@@ -246,7 +246,7 @@ scaledFont = Math.round(scaledFont);
         font-family: '${ev.nameFontFamily}', sans-serif;
         font-size: ${scaledFont}px;
         fill: ${ev.nameFontColor};
-        font-weight: 500;
+        font-weight: 600;
       }
     </style>
     <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="t">
@@ -256,14 +256,23 @@ scaledFont = Math.round(scaledFont);
   const svgBuf = Buffer.from(svg);
 
   // --- Bigger and cleaner QR (easy to scan) ---
-  const qrSizePx = Math.max(60, Math.round((ev.qrSize || 0.06) * tplW)); // increase clarity
+  
+  let qrSizePx = Math.round((ev.qrSize || 0.14) * tplW);
+  qrSizePx = Math.min(Math.max(qrSizePx, 100), tplW * 0.12);
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
-    { width: qrSizePx, errorCorrectionLevel: "Q", margin: 1.5 }
+    {
+    width: qrSizePx,
+    errorCorrectionLevel: "Q", // ↑ better redundancy
+    margin: 4,                 // ↑ better edge spacing
+    color: {
+      dark: "#000000",         // pure black for strong contrast
+      light: "#FFFFFF"         // pure white background
+    }
   );
 
-  const qrX = Math.round(ev.qrX * tplW);
-  const qrY = Math.round(ev.qrY * tplH);
+  const qrX = Math.round(ev.qrX * tplW - qrSizePx * 0.1);
+  const qrY = Math.round(ev.qrY * tplH - qrSizePx * 0.1);
 
   // --- Adjust SVG centering relative to name box ---
   const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
@@ -357,6 +366,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
