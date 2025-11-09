@@ -1,5 +1,5 @@
 // ===============================
-// UEM Event Certificates - Backend (FINAL STABLE BUILD)
+// UEM Event Certificates - Backend (FINAL STABLE BUILD ✅)
 // ===============================
 
 require("dotenv").config();
@@ -46,8 +46,7 @@ const escapeXml = (unsafe = "") =>
 // ====== MULTER ======
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, TEMP_DIR),
-  filename: (_, file, cb) =>
-    cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`),
+  filename: (_, file, cb) => cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`),
 });
 const upload = multer({ storage });
 
@@ -58,7 +57,6 @@ let db;
     filename: path.join(__dirname, "data.db"),
     driver: sqlite3.Database,
   });
-
   await db.exec(`
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS events (
@@ -78,7 +76,6 @@ let db;
       FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
     );
   `);
-
   console.log("✅ Database initialized");
 })();
 
@@ -97,7 +94,7 @@ function generateToken() {
   return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: "12h" });
 }
 function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.split(" ")[1] || req.query.token || req.body.token;
+  const token = req.headers.authorization?.split(" ")[1] || req.query.token;
   if (!token) return res.status(401).json({ error: "Unauthorized" });
   try {
     jwt.verify(token, JWT_SECRET);
@@ -109,7 +106,7 @@ function authMiddleware(req, res, next) {
 
 // ====== ROUTES ======
 app.post("/api/admin/login", (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password } = req.body;
   if (username === ADMIN_USER && password === ADMIN_PASS)
     return res.json({ token: generateToken() });
   res.status(401).json({ error: "Invalid credentials" });
@@ -131,7 +128,6 @@ app.post("/api/upload-template", upload.single("template"), async (req, res) => 
       height: meta.height,
     });
   } catch (err) {
-    console.error("Upload Error:", err);
     res.status(500).json({ error: "Upload failed", details: err.message });
   }
 });
@@ -151,14 +147,8 @@ app.post("/api/events", authMiddleware, async (req, res) => {
       p.nameFontColor || "#0ea5e9", p.nameAlign || "center",
       clamp(p.qrX,0,1), clamp(p.qrY,0,1), clamp(p.qrSize,0.01,1)
     );
-
-    res.json({
-      success: true,
-      eventId: stmt.lastID,
-      formLink: `${BASE_URL}/form/${stmt.lastID}`,
-    });
+    res.json({ success: true, eventId: stmt.lastID, formLink: `${BASE_URL}/form/${stmt.lastID}` });
   } catch (err) {
-    console.error("Create Event Error:", err);
     res.status(500).json({ error: "Failed to create event", details: err.message });
   }
 });
@@ -169,22 +159,20 @@ app.get("/api/events", authMiddleware, async (_, res) => {
     const rows = await db.all("SELECT * FROM events ORDER BY id DESC");
     res.json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch events", details: err.message });
+    res.status(500).json({ error: "Failed to fetch events" });
   }
 });
 
 // ========= PUBLIC FORM =========
 app.get("/form/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const ev = await db.get("SELECT id,name,orgBy,date FROM events WHERE id=?", id);
+  const ev = await db.get("SELECT * FROM events WHERE id=?", id);
   if (!ev) return res.status(404).send("Event not found");
-
   res.send(`
   <!doctype html>
   <html><head><meta charset="utf-8"><title>${ev.name}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  </head><body class="bg-light">
-  <div class="container py-5">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"></head>
+  <body class="bg-light"><div class="container py-5">
   <div class="card shadow-lg p-4 mx-auto" style="max-width:700px">
   <h3>${ev.name}</h3><p class="text-muted">${ev.orgBy} • ${ev.date}</p>
   <form method="POST" action="/api/submit/${ev.id}">
@@ -198,95 +186,48 @@ app.get("/form/:id", async (req, res) => {
   </form></div></div></body></html>`);
 });
 
-// ========= VERIFY QR =========
-app.get("/verify", async (req, res) => {
-  const { name, event } = req.query;
-  if (!name || !event) return res.status(400).send("Missing params");
-
-  const ev = await db.get("SELECT * FROM events WHERE id=?", event);
-  const rec = await db.get("SELECT * FROM responses WHERE event_id=? AND name=?", event, name);
-  if (!ev || !rec)
-    return res.status(404).send(`<h3>Not found</h3><p>No certificate record found for ${escapeXml(name)}.</p>`);
-
-  res.send(`
-  <!doctype html><html><head><meta charset="utf-8"><title>Verified</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"></head>
-  <body class="bg-light"><div class="container py-5">
-  <div class="card p-4 shadow-lg mx-auto" style="max-width:720px">
-  <h4>Certificate Verified ✅</h4><dl class="row mt-3">
-  <dt class="col-sm-4">Name</dt><dd class="col-sm-8">${escapeXml(rec.name)}</dd>
-  <dt class="col-sm-4">Event</dt><dd class="col-sm-8">${escapeXml(ev.name)}</dd>
-  <dt class="col-sm-4">Organized By</dt><dd class="col-sm-8">${escapeXml(ev.orgBy)}</dd>
-  <dt class="col-sm-4">Date</dt><dd class="col-sm-8">${escapeXml(ev.date)}</dd>
-  </dl><a class="btn btn-success" href="${rec.cert_path}" target="_blank">View Certificate</a></div></div></body></html>`);
-});
-
 // ========= GENERATE CERTIFICATE =========
 async function generateCertificate(ev, data) {
   const { name, email, mobile, dept, year, enroll } = data;
-
-  const tplFull = path.join(__dirname, "uploads", "templates", path.basename(ev.templatePath));
-  if (!fs.existsSync(tplFull)) throw new Error("Template file not found");
-
+  const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
   const meta = await sharp(tplFull).metadata();
   const tplW = meta.width, tplH = meta.height;
-
   const nbx = ev.nameBoxX * tplW, nby = ev.nameBoxY * tplH;
   const nbw = ev.nameBoxW * tplW, nbh = ev.nameBoxH * tplH;
 
-  const expandedW = Math.max(nbw * 1.6, nbw + 20);
-  const expandedH = Math.max(nbh * 1.8, nbh + 20);
   const baseFont = Math.max(10, Math.round((ev.nameFontSize || 48) * (tplH / 850)));
   const scaledFont = name.length > 28 ? Math.floor(baseFont * (28 / name.length)) : baseFont;
 
-  const alignMap = { left: "start", center: "middle", right: "end" };
-  const textAnchor = alignMap[ev.nameAlign] || "middle";
-  const textX = textAnchor === "start" ? scaledFont * 0.6 :
-                textAnchor === "end" ? expandedW - scaledFont * 0.6 : expandedW / 2;
-  const textY = expandedH / 2 + Math.round(scaledFont * 0.15);
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${expandedW}" height="${expandedH}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
   <style>.t{font-family:'${ev.nameFontFamily}',sans-serif;font-size:${scaledFont}px;fill:${ev.nameFontColor};font-weight:600;}</style>
-  <text x="${textX}" y="${textY}" text-anchor="${textAnchor}" dominant-baseline="middle" class="t">${escapeXml(name)}</text></svg>`;
+  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" class="t">${escapeXml(name)}</text></svg>`;
   const svgBuf = Buffer.from(svg);
 
-  const verifyUrl = `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${encodeURIComponent(ev.id)}`;
   const qrSizePx = Math.max(60, Math.round((ev.qrSize || 0.06) * tplW));
-  const qrBuffer = await QRCode.toBuffer(verifyUrl, { width: qrSizePx, errorCorrectionLevel: "H" });
-
-  const qrX = Math.round(ev.qrX * tplW);
-  const qrY = Math.round(ev.qrY * tplH);
-  const svgLeft = Math.round(nbx - (expandedW - nbw) / 2);
-  const svgTop = Math.round(nby - (expandedH - nbh) / 2);
+  const qrBuffer = await QRCode.toBuffer(`${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`, { width: qrSizePx });
+  const qrX = Math.round(ev.qrX * tplW), qrY = Math.round(ev.qrY * tplH);
 
   const certFile = `${Date.now()}-${uuidv4()}.png`;
   const certFull = path.join(CERTS_DIR, certFile);
   await sharp(tplFull)
-    .composite([{ input: svgBuf, left: svgLeft, top: svgTop }, { input: qrBuffer, left: qrX, top: qrY }])
-    .png()
-    .toFile(certFull);
+    .composite([{ input: svgBuf, left: nbx, top: nby }, { input: qrBuffer, left: qrX, top: qrY }])
+    .png().toFile(certFull);
 
   const certRel = `/uploads/certs/${certFile}`;
-  await db.run(
-    `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    ev.id, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated"
-  );
-
+  await db.run(`INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
+    VALUES (?,?,?,?,?,?,?,?,?)`, ev.id, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated");
   return certRel;
 }
 
-// ========= PUBLIC FORM SUBMIT =========
+// ========= FORM SUBMIT =========
 app.post("/api/submit/:eventId", bodyParser.urlencoded({ extended: true }), async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
     const ev = await db.get("SELECT * FROM events WHERE id=?", eId);
     if (!ev) return res.status(404).send("Event not found");
-
     const certPath = await generateCertificate(ev, req.body);
     res.send(`<h3>✅ Certificate Generated</h3><a href="${certPath}" target="_blank">View Certificate</a>`);
   } catch (err) {
-    console.error("Generate Error:", err);
     res.status(500).send("Error generating certificate: " + err.message);
   }
 });
@@ -297,18 +238,15 @@ app.post("/api/bulk-upload/:eventId", authMiddleware, upload.single("file"), asy
     const eId = parseInt(req.params.eventId);
     const ev = await db.get("SELECT * FROM events WHERE id=?", eId);
     if (!ev) return res.status(404).json({ error: "Event not found" });
-
     const ext = path.extname(req.file.originalname).toLowerCase();
     let participants = [];
 
-    if (ext === ".xlsx" || ext === ".xls") {
+    if (ext.includes("xls")) {
       const workbook = xlsx.readFile(req.file.path);
       participants = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
     } else if (ext === ".csv") {
       const rows = [];
-      await new Promise((resolve) =>
-        fs.createReadStream(req.file.path).pipe(csv()).on("data", (r) => rows.push(r)).on("end", resolve)
-      );
+      await new Promise((resolve) => fs.createReadStream(req.file.path).pipe(csv()).on("data", (r) => rows.push(r)).on("end", resolve));
       participants = rows;
     } else return res.status(400).json({ error: "Unsupported file type" });
 
@@ -318,11 +256,9 @@ app.post("/api/bulk-upload/:eventId", authMiddleware, upload.single("file"), asy
       await generateCertificate(ev, row);
       count++;
     }
-
     fs.unlinkSync(req.file.path);
     res.json({ success: true, message: `Generated ${count} certificates.` });
   } catch (err) {
-    console.error("Bulk Error:", err);
     res.status(500).json({ error: "Bulk upload failed", details: err.message });
   }
 });
@@ -333,30 +269,23 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
     const eventId = parseInt(req.params.id);
     const responses = await db.all("SELECT * FROM responses WHERE event_id = ?", eventId);
     if (!responses.length) return res.status(404).json({ error: "No data found" });
-
     const zipName = `event_${eventId}_${Date.now()}.zip`;
     const zipPath = path.join(__dirname, zipName);
     const output = fs.createWriteStream(zipPath);
     const archive = archiver("zip", { zlib: { level: 9 } });
-
     output.on("close", () => res.download(zipPath, zipName, () => fs.unlinkSync(zipPath)));
     archive.pipe(output);
 
-    archive.append(
-      "Name,Email,Mobile,Dept,Year,Enroll,CertPath\n" +
-        responses.map(r => `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${r.cert_path}"`).join("\n"),
-      { name: "data.csv" }
-    );
-
+    archive.append("Name,Email,Mobile,Dept,Year,Enroll,CertPath\n" +
+      responses.map(r => `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${r.cert_path}"`).join("\n"),
+      { name: "data.csv" });
     for (const r of responses) {
       const certPath = path.join(__dirname, r.cert_path.replace(/^\//, ""));
       if (fs.existsSync(certPath))
         archive.file(certPath, { name: `certificates/${r.name.replace(/[^\w]/g, "_")}.png` });
     }
-
     await archive.finalize();
   } catch (err) {
-    console.error("Download Error:", err);
     res.status(500).json({ error: "Download failed", details: err.message });
   }
 });
