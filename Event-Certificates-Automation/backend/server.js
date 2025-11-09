@@ -1,6 +1,5 @@
-// backend/server.js
 // ===============================
-// UEM Event Certificates - Backend (FINAL WORKING BUILD with QR verify + better scan readability)
+// UEM Event Certificates - Backend (FINAL BUILD with Bulk Upload + QR Verify + Mail)
 // ===============================
 
 require("dotenv").config();
@@ -18,6 +17,8 @@ const archiver = require("archiver");
 const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
+const xlsx = require("xlsx");
+const csv = require("csv-parser");
 
 // ====== ENV ======
 const PORT = process.env.PORT || 10000;
@@ -30,7 +31,8 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const TEMPLATES_DIR = path.join(UPLOAD_DIR, "templates");
 const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
-[UPLOAD_DIR, TEMPLATES_DIR, CERTS_DIR].forEach((d) => {
+const TEMP_DIR = path.join(__dirname, "temp");
+[UPLOAD_DIR, TEMPLATES_DIR, CERTS_DIR, TEMP_DIR].forEach((d) => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
@@ -43,7 +45,7 @@ const escapeXml = (unsafe = "") =>
 
 // ====== MULTER ======
 const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, TEMPLATES_DIR),
+  destination: (_, __, cb) => cb(null, TEMP_DIR),
   filename: (_, file, cb) =>
     cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`),
 });
@@ -85,7 +87,7 @@ const app = express();
 app.use(
   cors({
     origin: "*",
-    allowedHeaders: ["Content-Type", "Authorization", "authorization"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   })
 );
@@ -106,7 +108,7 @@ function authMiddleware(req, res, next) {
   try {
     jwt.verify(token, JWT_SECRET);
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
@@ -119,14 +121,15 @@ app.post("/api/admin/login", (req, res) => {
   res.status(401).json({ error: "Invalid credentials" });
 });
 
-app.get("/api/test", (_, res) =>
-  res.json({ success: true, message: "Backend OK" })
-);
+app.get("/api/test", (_, res) => res.json({ success: true, message: "Backend OK" }));
 
+// ========= UPLOAD TEMPLATE =========
 app.post("/api/upload-template", upload.single("template"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    const meta = await sharp(req.file.path).metadata();
+    const dest = path.join(TEMPLATES_DIR, req.file.filename);
+    fs.renameSync(req.file.path, dest);
+    const meta = await sharp(dest).metadata();
     res.json({
       success: true,
       path: `/uploads/templates/${req.file.filename}`,
@@ -134,11 +137,12 @@ app.post("/api/upload-template", upload.single("template"), async (req, res) => 
       height: meta.height,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Upload Error:", err);
     res.status(500).json({ error: "Upload failed", details: err.message });
   }
 });
 
+// ========= CREATE EVENT =========
 app.post("/api/events", authMiddleware, async (req, res) => {
   try {
     const p = req.body;
@@ -165,6 +169,7 @@ app.post("/api/events", authMiddleware, async (req, res) => {
   }
 });
 
+// ========= GET EVENTS =========
 app.get("/api/events", authMiddleware, async (_, res) => {
   try {
     const rows = await db.all("SELECT * FROM events ORDER BY id DESC");
@@ -174,88 +179,187 @@ app.get("/api/events", authMiddleware, async (_, res) => {
   }
 });
 
-// ========= CERTIFICATE GENERATION =========
+// ========= PUBLIC FORM =========
+app.get("/form/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const ev = await db.get("SELECT id,name,orgBy,date FROM events WHERE id=?", id);
+  if (!ev) return res.status(404).send("Event not found");
+
+  res.send(`
+    <!doctype html>
+    <html><head><meta charset="utf-8"><title>${ev.name}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="bg-light">
+    <div class="container py-5">
+      <div class="card shadow-lg p-4 mx-auto" style="max-width:700px">
+        <h3>${ev.name}</h3>
+        <p class="text-muted">${ev.orgBy} • ${ev.date}</p>
+        <form method="POST" action="/api/submit/${ev.id}">
+          <div class="mb-2"><label>Full Name</label><input name="name" required class="form-control"></div>
+          <div class="mb-2"><label>Email</label><input name="email" type="email" required class="form-control"></div>
+          <div class="row"><div class="col"><input name="mobile" placeholder="Mobile" class="form-control"></div>
+          <div class="col"><input name="dept" placeholder="Department" class="form-control"></div></div>
+          <div class="row mt-2"><div class="col"><input name="year" placeholder="Year" class="form-control"></div>
+          <div class="col"><input name="enroll" placeholder="Enroll No." class="form-control"></div></div>
+          <button class="btn btn-primary w-100 mt-3">Generate Certificate</button>
+        </form>
+      </div>
+    </div></body></html>`);
+});
+
+// ========= VERIFY QR =========
+app.get("/verify", async (req, res) => {
+  const { name, event } = req.query;
+  if (!name || !event) return res.status(400).send("Missing params");
+
+  const ev = await db.get("SELECT * FROM events WHERE id=?", event);
+  const rec = await db.get("SELECT * FROM responses WHERE event_id=? AND name=?", event, name);
+  if (!ev || !rec)
+    return res.status(404).send(`<h3>Not found</h3><p>No certificate record found for ${escapeXml(name)}.</p>`);
+
+  res.send(`
+  <!doctype html><html><head><meta charset="utf-8"><title>Verified</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"></head>
+  <body class="bg-light"><div class="container py-5">
+  <div class="card p-4 shadow-lg mx-auto" style="max-width:720px">
+  <h4>Certificate Verification</h4>
+  <dl class="row mt-3">
+  <dt class="col-sm-4">Name</dt><dd class="col-sm-8">${escapeXml(rec.name)}</dd>
+  <dt class="col-sm-4">Event</dt><dd class="col-sm-8">${escapeXml(ev.name)}</dd>
+  <dt class="col-sm-4">Organized By</dt><dd class="col-sm-8">${escapeXml(ev.orgBy)}</dd>
+  <dt class="col-sm-4">Date</dt><dd class="col-sm-8">${escapeXml(ev.date)}</dd>
+  </dl><a class="btn btn-success" href="${rec.cert_path}" target="_blank">View Certificate</a>
+  <div class="alert alert-success mt-3">✅ Verified</div></div></div></body></html>`);
+});
+
+// ========= GENERATE CERTIFICATE =========
+async function generateCertificate(ev, data) {
+  const { name, email, mobile, dept, year, enroll } = data;
+  const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
+  const meta = await sharp(tplFull).metadata();
+  const tplW = meta.width, tplH = meta.height;
+
+  const nbx = ev.nameBoxX * tplW, nby = ev.nameBoxY * tplH;
+  const nbw = ev.nameBoxW * tplW, nbh = ev.nameBoxH * tplH;
+
+  const expandedW = Math.max(nbw * 1.6, nbw + 20);
+  const expandedH = Math.max(nbh * 1.8, nbh + 20);
+  const scaleY = tplH / 850;
+  const baseFont = Math.max(10, Math.round((ev.nameFontSize || 48) * scaleY));
+  const scaledFont = name.length > 28 ? Math.floor(baseFont * (28 / name.length)) : baseFont;
+
+  const alignMap = { left: "start", center: "middle", right: "end" };
+  const textAnchor = alignMap[ev.nameAlign] || "middle";
+  const textX = textAnchor === "start" ? scaledFont * 0.6 : textAnchor === "end" ? expandedW - scaledFont * 0.6 : expandedW / 2;
+  const textY = expandedH / 2 + Math.round(scaledFont * 0.15);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${expandedW}" height="${expandedH}">
+    <style>.t{font-family:'${ev.nameFontFamily}',sans-serif;font-size:${scaledFont}px;fill:${ev.nameFontColor};font-weight:600;}</style>
+    <text x="${textX}" y="${textY}" text-anchor="${textAnchor}" dominant-baseline="middle" class="t">${escapeXml(name)}</text></svg>`;
+  const svgBuf = Buffer.from(svg);
+
+  const verifyUrl = `${BASE_URL.replace(/\/$/,"")}/verify?name=${encodeURIComponent(name)}&event=${encodeURIComponent(ev.id)}`;
+  const qrBuffer = await QRCode.toBuffer(verifyUrl, { type: "png", width: 150, errorCorrectionLevel: "H" });
+  const qrX = Math.round(ev.qrX * tplW), qrY = Math.round(ev.qrY * tplH);
+
+  const certFile = `${Date.now()}-${uuidv4()}.png`;
+  const certFull = path.join(CERTS_DIR, certFile);
+  await sharp(tplFull).composite([{ input: svgBuf, left: nbx, top: nby }, { input: qrBuffer, left: qrX, top: qrY }]).png().toFile(certFull);
+  const certRel = `/uploads/certs/${certFile}`;
+
+  await db.run(`INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
+                VALUES (?,?,?,?,?,?,?,?,?)`,
+    ev.id, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated");
+  return certRel;
+}
+
+// ========= PUBLIC FORM SUBMIT =========
 app.post("/api/submit/:eventId", async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
     const ev = await db.get("SELECT * FROM events WHERE id=?", eId);
     if (!ev) return res.status(404).json({ error: "Event not found" });
 
-    const { name, email, mobile, dept, year, enroll } = req.body;
-    if (!name || !email)
-      return res.status(400).json({ error: "Missing name/email" });
+    const certPath = await generateCertificate(ev, req.body);
+    res.json({ success: true, certPath });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed", details: err.message });
+  }
+});
 
-    const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
-    const meta = await sharp(tplFull).metadata();
-    const tplW = meta.width, tplH = meta.height;
+// ========= BULK UPLOAD =========
+app.post("/api/bulk-upload/:eventId", authMiddleware, upload.single("file"), async (req, res) => {
+  try {
+    const eId = parseInt(req.params.eventId);
+    const ev = await db.get("SELECT * FROM events WHERE id=?", eId);
+    if (!ev) return res.status(404).json({ error: "Event not found" });
 
-    const nbx = ev.nameBoxX * tplW, nby = ev.nameBoxY * tplH;
-    const nbw = ev.nameBoxW * tplW, nbh = ev.nameBoxH * tplH;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let participants = [];
 
-    const expandedW = Math.max(nbw * 1.6, nbw + 20);
-    const expandedH = Math.max(nbh * 1.8, nbh + 20);
-    const scaleY = tplH / 850;
-    const baseFont = Math.max(10, Math.round((ev.nameFontSize || 48) * scaleY));
-    const maxChars = 28;
-    const scaledFont =
-      name.length > maxChars ? Math.floor(baseFont * (maxChars / name.length)) : baseFont;
+    if (ext === ".xlsx" || ext === ".xls") {
+      const workbook = xlsx.readFile(req.file.path);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      participants = xlsx.utils.sheet_to_json(sheet);
+    } else if (ext === ".csv") {
+      const rows = [];
+      await new Promise((resolve) =>
+        fs.createReadStream(req.file.path)
+          .pipe(csv())
+          .on("data", (r) => rows.push(r))
+          .on("end", resolve)
+      );
+      participants = rows;
+    } else return res.status(400).json({ error: "Unsupported file type" });
 
-    const alignMap = { left: "start", center: "middle", right: "end" };
-    const textAnchor = alignMap[ev.nameAlign] || "middle";
-    const textX = textAnchor === "start"
-      ? scaledFont * 0.6
-      : textAnchor === "end"
-      ? expandedW - scaledFont * 0.6
-      : expandedW / 2;
-    const textY = expandedH / 2 + Math.round(scaledFont * 0.15);
+    let count = 0;
+    for (const row of participants) {
+      if (!row.name || !row.email) continue;
+      await generateCertificate(ev, row);
+      count++;
+    }
 
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${expandedW}" height="${expandedH}">
-        <style>
-          .t { font-family:'${ev.nameFontFamily || "Poppins"}',sans-serif; font-size:${scaledFont}px; fill:${ev.nameFontColor || "#0ea5e9"}; font-weight:600; }
-        </style>
-        <text x="${textX}" y="${textY}" text-anchor="${textAnchor}" dominant-baseline="middle" class="t">${escapeXml(name)}</text>
-      </svg>`;
-    const svgBuf = Buffer.from(svg);
+    fs.unlinkSync(req.file.path);
+    res.json({ success: true, message: `Generated ${count} certificates.` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Bulk upload failed", details: err.message });
+  }
+});
 
-    // ✅ FIXED QR CODE GENERATION
-    const verifyUrl = `${BASE_URL.replace(/\/$/,"")}/verify?name=${encodeURIComponent(name)}&event=${encodeURIComponent(eId)}`;
-    const qrSizePx = Math.max(150, Math.round((ev.qrSize || 0.07) * tplW));
-    const qrBuffer = await QRCode.toBuffer(verifyUrl, {
-      type: "png",
-      width: qrSizePx,
-      errorCorrectionLevel: "H",
-      margin: 2,
-      color: { dark: "#000000", light: "#ffffff" },
-    });
+// ========= DOWNLOAD DATA =========
+app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id);
+    const responses = await db.all("SELECT * FROM responses WHERE event_id = ?", eventId);
+    if (!responses.length) return res.status(404).json({ error: "No data found" });
 
-    const qrX = Math.round(ev.qrX * tplW);
-    const qrY = Math.round(ev.qrY * tplH);
-    const svgLeft = Math.round(nbx - (expandedW - nbw) / 2);
-    const svgTop = Math.round(nby - (expandedH - nbh) / 2);
+    const zipName = `event_${eventId}_${Date.now()}.zip`;
+    const zipPath = path.join(__dirname, zipName);
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
 
-    const certFile = `${Date.now()}-${uuidv4()}.png`;
-    const certFull = path.join(CERTS_DIR, certFile);
-    await sharp(tplFull)
-      .composite([{ input: svgBuf, left: svgLeft, top: svgTop }, { input: qrBuffer, left: qrX, top: qrY }])
-      .png()
-      .toFile(certFull);
+    output.on("close", () => res.download(zipPath, zipName, () => fs.unlinkSync(zipPath)));
+    archive.pipe(output);
 
-    const certRel = `/uploads/certs/${certFile}`;
-    await db.run(
-      `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      eId, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated"
+    archive.append(
+      "Name,Email,Mobile,Dept,Year,Enroll,CertPath\n" +
+        responses.map(r => `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${r.cert_path}"`).join("\n"),
+      { name: "data.csv" }
     );
 
-    res.json({ success: true, certPath: certRel });
+    responses.forEach((r) => {
+      const certPath = path.join(__dirname, r.cert_path.replace(/^\//, ""));
+      if (fs.existsSync(certPath)) archive.file(certPath, { name: `certificates/${r.name.replace(/[^\w]/g, "_")}.png` });
+    });
+
+    await archive.finalize();
   } catch (err) {
-    console.error("Cert Generation Error:", err);
-    res.status(500).json({ error: "Failed to generate certificate", details: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Download failed", details: err.message });
   }
 });
 
 // ====== START ======
-app.listen(PORT, "0.0.0.0", () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
