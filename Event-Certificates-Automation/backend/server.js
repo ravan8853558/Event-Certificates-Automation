@@ -268,6 +268,7 @@ scaledFont = Math.round(scaledFont);
     color: {
       dark: "#000000",         // pure black for strong contrast
       light: "#FFFFFF"         // pure white background
+     }
     }
   );
 
@@ -366,6 +367,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
