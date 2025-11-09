@@ -201,18 +201,18 @@ async function generateCertificate(ev, data) {
   const nbw = ev.nameBoxW * tplW;
   const nbh = ev.nameBoxH * tplH;
 
-  // --- Expand text box slightly to avoid clipping ---
-  const safeW = nbw * 1.8;
-  const safeH = nbh * 2.0;
+  // --- Safe expanded area (slightly bigger for better readability) ---
+  const safeW = nbw * 2.2; // expanded width for longer names
+  const safeH = nbh * 2.5; // taller box for clearer text
 
-  // --- Font scaling logic (adaptive font size) ---
-  const baseFont = Math.max(10, ev.nameFontSize || 48);
-  const scaledFont =
-    name.length > 32 ? Math.floor(baseFont * (26 / name.length)) :
-    name.length > 20 ? Math.floor(baseFont * (30 / name.length)) :
-    baseFont;
+  // --- Font scaling logic (smooth adaptive scaling) ---
+  const baseFont = Math.max(14, ev.nameFontSize || 48);
+  let scaledFont = baseFont;
+  if (name.length > 20) scaledFont = Math.floor(baseFont * 0.9);
+  if (name.length > 28) scaledFont = Math.floor(baseFont * 0.8);
+  if (name.length > 36) scaledFont = Math.floor(baseFont * 0.7);
 
-  // --- SVG for participant name (perfectly centered) ---
+  // --- SVG for participant name ---
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeW}" height="${safeH}">
     <style>
       .t {
@@ -228,17 +228,22 @@ async function generateCertificate(ev, data) {
   </svg>`;
   const svgBuf = Buffer.from(svg);
 
-  // --- Bigger and cleaner QR (easy to scan) ---
-  const qrSizePx = Math.max(140, Math.round((ev.qrSize || 0.14) * tplW)); // increase clarity
+  // --- Clean + Scanable QR (perfect size balance) ---
+  const qrSizePx = Math.max(160, Math.round((ev.qrSize || 0.16) * tplW)); // ~15-16% of width
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
-    { width: qrSizePx, errorCorrectionLevel: "M", margin: 3 }
+    {
+      width: qrSizePx,
+      errorCorrectionLevel: "M",
+      margin: 2,
+      color: { dark: "#000000", light: "#FFFFFF" }
+    }
   );
 
   const qrX = Math.round(ev.qrX * tplW);
   const qrY = Math.round(ev.qrY * tplH);
 
-  // --- Adjust SVG centering relative to name box ---
+  // --- Adjust SVG center relative to the box ---
   const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
   const svgTop = Math.round(nby - (safeH - nbh) / 2);
 
@@ -265,52 +270,6 @@ async function generateCertificate(ev, data) {
 
   return certRel;
 }
-
-
-// ========= FORM SUBMIT =========
-app.post("/api/submit/:eventId", bodyParser.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const eId = parseInt(req.params.eventId);
-    const ev = await db.get("SELECT * FROM events WHERE id=?", eId);
-    if (!ev) return res.status(404).send("Event not found");
-    const certPath = await generateCertificate(ev, req.body);
-    res.send(`<h3>✅ Certificate Generated</h3><a href="${certPath}" target="_blank">View Certificate</a>`);
-  } catch (err) {
-    res.status(500).send("Error generating certificate: " + err.message);
-  }
-});
-
-// ========= BULK UPLOAD =========
-app.post("/api/bulk-upload/:eventId", authMiddleware, upload.single("file"), async (req, res) => {
-  try {
-    const eId = parseInt(req.params.eventId);
-    const ev = await db.get("SELECT * FROM events WHERE id=?", eId);
-    if (!ev) return res.status(404).json({ error: "Event not found" });
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    let participants = [];
-
-    if (ext.includes("xls")) {
-      const workbook = xlsx.readFile(req.file.path);
-      participants = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-    } else if (ext === ".csv") {
-      const rows = [];
-      await new Promise((resolve) => fs.createReadStream(req.file.path).pipe(csv()).on("data", (r) => rows.push(r)).on("end", resolve));
-      participants = rows;
-    } else return res.status(400).json({ error: "Unsupported file type" });
-
-    let count = 0;
-    for (const row of participants) {
-      if (!row.name || !row.email) continue;
-      await generateCertificate(ev, row);
-      count++;
-    }
-    fs.unlinkSync(req.file.path);
-    res.json({ success: true, message: `Generated ${count} certificates.` });
-  } catch (err) {
-    res.status(500).json({ error: "Bulk upload failed", details: err.message });
-  }
-});
-
 // ========= DOWNLOAD DATA =========
 app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
   try {
@@ -337,10 +296,5 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Download failed", details: err.message });
   }
 });
-
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
-
-
-
-
