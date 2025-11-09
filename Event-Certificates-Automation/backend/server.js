@@ -203,7 +203,7 @@ async function generateCertificate(ev, data) {
   <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" class="t">${escapeXml(name)}</text></svg>`;
   const svgBuf = Buffer.from(svg);
 
-  const qrSizePx = Math.max(60, Math.round((ev.qrSize || 0.06) * tplW));
+  const qrSizePx = Math.max(80, Math.round((ev.qrSize || 0.08) * tplW));
   const qrBuffer = await QRCode.toBuffer(`${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`, { width: qrSizePx });
   const qrX = Math.round(ev.qrX * tplW), qrY = Math.round(ev.qrY * tplH);
 
@@ -292,3 +292,4 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
