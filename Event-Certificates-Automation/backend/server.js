@@ -201,18 +201,18 @@ async function generateCertificate(ev, data) {
   const nbw = ev.nameBoxW * tplW;
   const nbh = ev.nameBoxH * tplH;
 
-  // --- Safe expanded area (slightly bigger for better readability) ---
-  const safeW = nbw * 2.2; // expanded width for longer names
-  const safeH = nbh * 2.5; // taller box for clearer text
+  // --- Expand text box slightly to avoid clipping ---
+  const safeW = nbw * 1.8;
+  const safeH = nbh * 2.0;
 
-  // --- Font scaling logic (smooth adaptive scaling) ---
-  const baseFont = Math.max(14, ev.nameFontSize || 48);
-  let scaledFont = baseFont;
-  if (name.length > 20) scaledFont = Math.floor(baseFont * 0.9);
-  if (name.length > 28) scaledFont = Math.floor(baseFont * 0.8);
-  if (name.length > 36) scaledFont = Math.floor(baseFont * 0.7);
+  // --- Font scaling logic (adaptive font size) ---
+  const baseFont = Math.max(10, ev.nameFontSize || 48);
+  const scaledFont =
+    name.length > 32 ? Math.floor(baseFont * (26 / name.length)) :
+    name.length > 20 ? Math.floor(baseFont * (30 / name.length)) :
+    baseFont;
 
-  // --- SVG for participant name ---
+  // --- SVG for participant name (perfectly centered) ---
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeW}" height="${safeH}">
     <style>
       .t {
@@ -228,22 +228,17 @@ async function generateCertificate(ev, data) {
   </svg>`;
   const svgBuf = Buffer.from(svg);
 
-  // --- Clean + Scanable QR (perfect size balance) ---
-  const qrSizePx = Math.max(160, Math.round((ev.qrSize || 0.16) * tplW)); // ~15-16% of width
+  // --- Bigger and cleaner QR (easy to scan) ---
+  const qrSizePx = Math.max(140, Math.round((ev.qrSize || 0.14) * tplW)); // increase clarity
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
-    {
-      width: qrSizePx,
-      errorCorrectionLevel: "M",
-      margin: 2,
-      color: { dark: "#000000", light: "#FFFFFF" }
-    }
+    { width: qrSizePx, errorCorrectionLevel: "M", margin: 3 }
   );
 
   const qrX = Math.round(ev.qrX * tplW);
   const qrY = Math.round(ev.qrY * tplH);
 
-  // --- Adjust SVG center relative to the box ---
+  // --- Adjust SVG centering relative to name box ---
   const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
   const svgTop = Math.round(nby - (safeH - nbh) / 2);
 
@@ -270,31 +265,7 @@ async function generateCertificate(ev, data) {
 
   return certRel;
 }
-// ========= DOWNLOAD DATA =========
-app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
-  try {
-    const eventId = parseInt(req.params.id);
-    const responses = await db.all("SELECT * FROM responses WHERE event_id = ?", eventId);
-    if (!responses.length) return res.status(404).json({ error: "No data found" });
-    const zipName = `event_${eventId}_${Date.now()}.zip`;
-    const zipPath = path.join(__dirname, zipName);
-    const output = fs.createWriteStream(zipPath);
-    const archive = archiver("zip", { zlib: { level: 9 } });
-    output.on("close", () => res.download(zipPath, zipName, () => fs.unlinkSync(zipPath)));
-    archive.pipe(output);
 
-    archive.append("Name,Email,Mobile,Dept,Year,Enroll,CertPath\n" +
-      responses.map(r => `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${r.cert_path}"`).join("\n"),
-      { name: "data.csv" });
-    for (const r of responses) {
-      const certPath = path.join(__dirname, r.cert_path.replace(/^\//, ""));
-      if (fs.existsSync(certPath))
-        archive.file(certPath, { name: `certificates/${r.name.replace(/[^\w]/g, "_")}.png` });
-    }
-    await archive.finalize();
-  } catch (err) {
-    res.status(500).json({ error: "Download failed", details: err.message });
-  }
-});
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
