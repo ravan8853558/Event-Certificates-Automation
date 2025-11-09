@@ -197,12 +197,68 @@ async function generateCertificate(ev, data) {
   const nbx = ev.nameBoxX * tplW, nby = ev.nameBoxY * tplH;
   const nbw = ev.nameBoxW * tplW, nbh = ev.nameBoxH * tplH;
 
-  // --- Smart font scaling (independent of template DPI) ---
+  // --- Expand the text area slightly (to prevent clipping) ---
+  const safeW = nbw * 1.8;
+  const safeH = nbh * 2.0;
+
+  // --- Font scaling logic ---
   const baseFont = Math.max(10, ev.nameFontSize || 48);
   const scaledFont =
-    name.length > 20 ? Math.floor(baseFont * (24 / name.length)) :
-    name.length > 32 ? Math.floor(baseFont * (28 / name.length)) :
+    name.length > 20 ? Math.floor(baseFont * (26 / name.length)) :
+    name.length > 32 ? Math.floor(baseFont * (30 / name.length)) :
     baseFont;
+
+  // --- Render text cleanly in the expanded safe area ---
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeW}" height="${safeH}">
+    <style>
+      .t {
+        font-family: '${ev.nameFontFamily}', sans-serif;
+        font-size: ${scaledFont}px;
+        fill: ${ev.nameFontColor};
+        font-weight: 600;
+      }
+    </style>
+    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="t">
+      ${escapeXml(name)}
+    </text>
+  </svg>`;
+  const svgBuf = Buffer.from(svg);
+
+  // --- Bigger and clear QR ---
+  const qrSizePx = Math.max(120, Math.round((ev.qrSize || 0.14) * tplW));
+  const qrBuffer = await QRCode.toBuffer(
+    `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
+    { width: qrSizePx, errorCorrectionLevel: "M", margin: 3 }
+  );
+
+  const qrX = Math.round(ev.qrX * tplW);
+  const qrY = Math.round(ev.qrY * tplH);
+
+  // --- Center the expanded SVG on the original box ---
+  const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
+  const svgTop = Math.round(nby - (safeH - nbh) / 2);
+
+  // --- Composite layers and save final certificate ---
+  const certFile = `${Date.now()}-${uuidv4()}.png`;
+  const certFull = path.join(CERTS_DIR, certFile);
+
+  await sharp(tplFull)
+    .composite([
+      { input: svgBuf, left: svgLeft, top: svgTop },
+      { input: qrBuffer, left: qrX, top: qrY }
+    ])
+    .png()
+    .toFile(certFull);
+
+  const certRel = `/uploads/certs/${certFile}`;
+  await db.run(
+    `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    ev.id, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated"
+  );
+
+  return certRel;
+}
 
   // --- Perfectly centered text using central baseline ---
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
@@ -327,5 +383,6 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
