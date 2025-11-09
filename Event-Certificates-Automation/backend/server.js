@@ -189,26 +189,30 @@ app.get("/form/:id", async (req, res) => {
 // ========= GENERATE CERTIFICATE =========
 async function generateCertificate(ev, data) {
   const { name, email, mobile, dept, year, enroll } = data;
+
+  // --- Template image path ---
   const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
   const meta = await sharp(tplFull).metadata();
   const tplW = meta.width, tplH = meta.height;
 
-  // --- Name box position and dimensions ---
-  const nbx = ev.nameBoxX * tplW, nby = ev.nameBoxY * tplH;
-  const nbw = ev.nameBoxW * tplW, nbh = ev.nameBoxH * tplH;
+  // --- Name box positioning ---
+  const nbx = ev.nameBoxX * tplW;
+  const nby = ev.nameBoxY * tplH;
+  const nbw = ev.nameBoxW * tplW;
+  const nbh = ev.nameBoxH * tplH;
 
-  // --- Expand the text area slightly (to prevent clipping) ---
+  // --- Expand text box slightly to avoid clipping ---
   const safeW = nbw * 1.8;
   const safeH = nbh * 2.0;
 
-  // --- Font scaling logic ---
+  // --- Font scaling logic (adaptive font size) ---
   const baseFont = Math.max(10, ev.nameFontSize || 48);
   const scaledFont =
-    name.length > 20 ? Math.floor(baseFont * (26 / name.length)) :
-    name.length > 32 ? Math.floor(baseFont * (30 / name.length)) :
+    name.length > 32 ? Math.floor(baseFont * (26 / name.length)) :
+    name.length > 20 ? Math.floor(baseFont * (30 / name.length)) :
     baseFont;
 
-  // --- Render text cleanly in the expanded safe area ---
+  // --- SVG for participant name (perfectly centered) ---
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeW}" height="${safeH}">
     <style>
       .t {
@@ -224,8 +228,8 @@ async function generateCertificate(ev, data) {
   </svg>`;
   const svgBuf = Buffer.from(svg);
 
-  // --- Bigger and clear QR ---
-  const qrSizePx = Math.max(120, Math.round((ev.qrSize || 0.14) * tplW));
+  // --- Bigger and cleaner QR (easy to scan) ---
+  const qrSizePx = Math.max(140, Math.round((ev.qrSize || 0.14) * tplW)); // increase clarity
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
     { width: qrSizePx, errorCorrectionLevel: "M", margin: 3 }
@@ -234,11 +238,11 @@ async function generateCertificate(ev, data) {
   const qrX = Math.round(ev.qrX * tplW);
   const qrY = Math.round(ev.qrY * tplH);
 
-  // --- Center the expanded SVG on the original box ---
+  // --- Adjust SVG centering relative to name box ---
   const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
   const svgTop = Math.round(nby - (safeH - nbh) / 2);
 
-  // --- Composite layers and save final certificate ---
+  // --- Generate final certificate ---
   const certFile = `${Date.now()}-${uuidv4()}.png`;
   const certFull = path.join(CERTS_DIR, certFile);
 
@@ -251,6 +255,8 @@ async function generateCertificate(ev, data) {
     .toFile(certFull);
 
   const certRel = `/uploads/certs/${certFile}`;
+
+  // --- Save to DB ---
   await db.run(
     `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
      VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -260,55 +266,6 @@ async function generateCertificate(ev, data) {
   return certRel;
 }
 
-  // --- Perfectly centered text using central baseline ---
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
-    <style>
-      .t {
-        font-family: '${ev.nameFontFamily}', sans-serif;
-        font-size: ${scaledFont}px;
-        fill: ${ev.nameFontColor};
-        font-weight: 600;
-      }
-    </style>
-    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="t">
-      ${escapeXml(name)}
-    </text>
-  </svg>`;
-  const svgBuf = Buffer.from(svg);
-
-  // --- Bigger and cleaner QR for easier scanning ---
-  const qrSizePx = Math.max(100, Math.round((ev.qrSize || 0.12) * tplW));
-  const qrBuffer = await QRCode.toBuffer(
-    `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
-    { width: qrSizePx, errorCorrectionLevel: "M", margin: 2 }
-  );
-
-  const qrX = Math.round(ev.qrX * tplW);
-  const qrY = Math.round(ev.qrY * tplH);
-
-  // --- Generate final certificate image ---
-  const certFile = `${Date.now()}-${uuidv4()}.png`;
-  const certFull = path.join(CERTS_DIR, certFile);
-
-  await sharp(tplFull)
-    .composite([
-      { input: svgBuf, left: nbx, top: nby },
-      { input: qrBuffer, left: qrX, top: qrY }
-    ])
-    .png()
-    .toFile(certFull);
-
-  const certRel = `/uploads/certs/${certFile}`;
-
-  // --- Save record to DB ---
-  await db.run(
-    `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    ev.id, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated"
-  );
-
-  return certRel;
-}
 
 // ========= FORM SUBMIT =========
 app.post("/api/submit/:eventId", bodyParser.urlencoded({ extended: true }), async (req, res) => {
@@ -383,6 +340,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
