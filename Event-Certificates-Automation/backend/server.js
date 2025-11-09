@@ -27,6 +27,17 @@ const ADMIN_USER = process.env.ADMIN_USER || "admin@uem.com";
 const ADMIN_PASS = process.env.ADMIN_PASS || "UEM@12345";
 const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
 
+// ====== EMAIL CONFIG ======
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false, // true if port 465
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+
 // ====== PATHS ======
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const TEMPLATES_DIR = path.join(UPLOAD_DIR, "templates");
@@ -305,6 +316,37 @@ await sharp(tplFull)
     ev.id, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated"
   );
 
+  // --- Send certificate via email ---
+  try {
+    await transporter.sendMail({
+      from: `"${ev.orgBy || 'UEM Event Team'}" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: `🎓 Certificate - ${ev.name}`,
+      html: `
+        <p>Dear <b>${escapeXml(name)}</b>,</p>
+        <p>Congratulations on participating in <b>${escapeXml(ev.name)}</b> organized by <b>${escapeXml(ev.orgBy)}</b>.</p>
+        <p>Your certificate is attached below.</p>
+        <br>
+        <p>Regards,<br><b>${escapeXml(ev.orgBy)}</b></p>
+      `,
+      attachments: [
+        {
+          filename: `${name.replace(/[^\w]/g, "_")}.png`,
+          path: path.join(CERTS_DIR, certFile)
+        }
+      ]
+    });
+
+    await db.run(`UPDATE responses SET email_status = ? WHERE cert_path = ?`, "sent", certRel);
+    console.log(`📩 Certificate emailed to ${email}`);
+  } catch (err) {
+    console.error("Email send failed:", err.message);
+    await db.run(
+      `UPDATE responses SET email_status = ?, email_error = ? WHERE cert_path = ?`,
+      "failed", err.message, certRel
+    );
+  }
+
   return certRel;
 }
 
@@ -372,18 +414,5 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
