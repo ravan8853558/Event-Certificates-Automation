@@ -309,110 +309,76 @@ await sharp(tplFull)
 
   const certRel = `/uploads/certs/${certFile}`;
 
-  // --- Save to DB ---
+   // --- Save to DB ---
   await db.run(
     `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
      VALUES (?,?,?,?,?,?,?,?,?)`,
     ev.id, name, email, mobile || "", dept || "", year || "", enroll || "", certRel, "generated"
   );
 
-  // --- Send certificate via email ---
+  // --- Send certificate via Resend API ---
   try {
-    await transporter.sendMail({
-      from: `"${ev.orgBy || 'UEM Event Team'}" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `🎓 Certificate - ${ev.name}`,
-      html: `
-        <p>Dear <b>${escapeXml(name)}</b>,</p>
-        <p>Congratulations on participating in <b>${escapeXml(ev.name)}</b> organized by <b>${escapeXml(ev.orgBy)}</b>.</p>
-        <p>Your certificate is attached below.</p>
-        <br>
-        <p>Regards,<br><b>${escapeXml(ev.orgBy)}</b></p>
-      `,
-      attachments: [
-        {
-          filename: `${name.replace(/[^\w]/g, "_")}.png`,
-          path: path.join(CERTS_DIR, certFile)
-        }
-      ]
+    const certBuffer = fs.readFileSync(certFull);
+    const base64Cert = certBuffer.toString("base64");
+
+    const resSend = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: process.env.FROM_EMAIL,
+        to: email,
+        subject: `🎓 Certificate - ${ev.name}`,
+        html: `
+          <p>Dear <b>${escapeXml(name)}</b>,</p>
+          <p>Congratulations on participating in <b>${escapeXml(ev.name)}</b> organized by <b>${escapeXml(ev.orgBy)}</b>.</p>
+          <p>Your certificate is attached below.</p>
+          <br>
+          <p>Regards,<br><b>${escapeXml(ev.orgBy)}</b></p>
+        `,
+        attachments: [
+          {
+            filename: `${name.replace(/[^\w]/g, "_")}.png`,
+            content: base64Cert,
+            encoding: "base64",
+          },
+        ],
+      }),
     });
 
-    await db.run(`UPDATE responses SET email_status = ? WHERE cert_path = ?`, "sent", certRel);
-    console.log(`📩 Certificate emailed to ${email}`);
+    if (resSend.ok) {
+      await db.run(
+        `UPDATE responses SET email_status = ? WHERE cert_path = ?`,
+        "sent",
+        certRel
+      );
+      console.log(`📩 Certificate emailed instantly via Resend to ${email}`);
+    } else {
+      const errText = await resSend.text();
+      console.error("Resend error:", errText);
+      await db.run(
+        `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+        "failed",
+        errText,
+        certRel
+      );
+    }
   } catch (err) {
     console.error("Email send failed:", err.message);
     await db.run(
-      `UPDATE responses SET email_status = ?, email_error = ? WHERE cert_path = ?`,
-      "failed", err.message, certRel
+      `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+      "failed",
+      err.message,
+      certRel
     );
   }
 
   return certRel;
-}
-
-// ========= VERIFY CERTIFICATE =========
-app.get("/verify", async (req, res) => {
-  const { name, event } = req.query;
-  if (!name || !event)
-    return res.status(400).send("Missing parameters");
-
-  const ev = await db.get("SELECT * FROM events WHERE id=?", event);
-  const rec = await db.get("SELECT * FROM responses WHERE event_id=? AND name=?", event, name);
-
-  if (!ev || !rec)
-    return res.status(404).send(`<h3>Not Found</h3><p>No record for ${escapeXml(name)}</p>`);
-
-  res.send(`
-    <div style="font-family:sans-serif; text-align:center; margin-top:40px;">
-      <h2>✅ Verified Certificate</h2>
-      <p><b>${escapeXml(rec.name)}</b> participated in <b>${escapeXml(ev.name)}</b></p>
-      <p>Organized by: <b>${escapeXml(ev.orgBy)}</b> on <b>${escapeXml(ev.date)}</b></p>
-      <p><a href="${rec.cert_path}" target="_blank">View Certificate</a></p>
-    </div>
-  `);
-});
-
-// ========= DOWNLOAD DATA =========
-app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
-  try {
-    const eventId = parseInt(req.params.id);
-    const responses = await db.all("SELECT * FROM responses WHERE event_id = ?", eventId);
-    if (!responses.length) return res.status(404).json({ error: "No data found" });
-
-    const zipName = `event_${eventId}_${Date.now()}.zip`;
-    const zipPath = path.join(__dirname, zipName);
-    const output = fs.createWriteStream(zipPath);
-    const archive = archiver("zip", { zlib: { level: 9 } });
-
-    output.on("close", () => {
-      res.download(zipPath, zipName, () => fs.unlinkSync(zipPath));
-    });
-    archive.pipe(output);
-
-    // CSV data
-    archive.append(
-      "Name,Email,Mobile,Dept,Year,Enroll,CertPath\n" +
-        responses.map(r =>
-          `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${r.cert_path}"`
-        ).join("\n"),
-      { name: "data.csv" }
-    );
-
-    // Certificates
-    for (const r of responses) {
-      const certPath = path.join(__dirname, r.cert_path.replace(/^\//, ""));
-      if (fs.existsSync(certPath))
-        archive.file(certPath, { name: `certificates/${r.name.replace(/[^\w]/g, "_")}.png` });
-    }
-
-    await archive.finalize();
-  } catch (err) {
-    console.error("Download Error:", err);
-    res.status(500).json({ error: "Download failed", details: err.message });
-  }
-});
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
