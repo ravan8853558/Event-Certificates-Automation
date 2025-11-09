@@ -229,7 +229,7 @@ async function generateCertificate(ev, data) {
   const safeH = nbh * 2.0;
 
   // --- Font scaling logic (adaptive font size) ---
-const baseFont = Math.max(10, ev.nameFontSize || 36);
+const baseFont = Math.max(10, ev.nameFontSize || 34);
 let scaledFont = baseFont;
 
 if (name.length > 12) scaledFont = baseFont * 0.9;
@@ -247,9 +247,11 @@ scaledFont = Math.round(scaledFont);
         font-size: ${scaledFont}px;
         fill: ${ev.nameFontColor};
         font-weight: 600;
+        text-anchor: middle;        /* ← center align horizontally */
+        dominant-baseline: middle;  /* ← center align vertically */
       }
     </style>
-    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="t">
+    <text x="50%" y="48%" text-anchor="middle" dominant-baseline="central" class="t">
       ${escapeXml(name)}
     </text>
   </svg>`;
@@ -257,8 +259,8 @@ scaledFont = Math.round(scaledFont);
 
   // --- Bigger and cleaner QR (easy to scan) ---
   
-  let qrSizePx = Math.round((ev.qrSize || 0.18) * tplW);
-  qrSizePx = Math.min(Math.max(qrSizePx, 100), tplW * 0.12);
+  let qrSizePx = Math.round((ev.qrSize || 0.20) * tplW);
+  qrSizePx = Math.min(Math.max(qrSizePx, 120), tplW * 0.18); 
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify?name=${encodeURIComponent(name)}&event=${ev.id}`,
     {
@@ -367,6 +369,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
