@@ -273,9 +273,12 @@ scaledFont = Math.round(scaledFont);
      }
     }
   );
-
-  const qrX = Math.round(ev.qrX * tplW - qrSizePx * 0.1);
-  const qrY = Math.round(ev.qrY * tplH - qrSizePx * 0.1);
+  
+// 🟢 Bottom-right safe placement inside template
+  
+  const padding = tplW * 0.02; // 2% inward margin from edges
+  const qrX = tplW - qrSizePx - padding;
+  const qrY = tplH - qrSizePx - padding;
 
   // --- Adjust SVG centering relative to name box ---
   const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
@@ -369,6 +372,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
