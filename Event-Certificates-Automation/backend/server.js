@@ -225,15 +225,19 @@ async function generateCertificate(ev, data) {
   const nbh = ev.nameBoxH * tplH;
 
   // --- Expand text box slightly to avoid clipping ---
-  const safeW = nbw * 1.8;
+  const safeW = nbw * 2.4;
   const safeH = nbh * 2.0;
 
   // --- Font scaling logic (adaptive font size) ---
-  const baseFont = Math.max(10, ev.nameFontSize || 48);
-  const scaledFont =
-    name.length > 32 ? Math.floor(baseFont * (26 / name.length)) :
-    name.length > 20 ? Math.floor(baseFont * (30 / name.length)) :
-    baseFont;
+const baseFont = Math.max(10, ev.nameFontSize || 44);
+let scaledFont = baseFont;
+
+if (name.length > 12) scaledFont = baseFont * 0.9;
+if (name.length > 18) scaledFont = baseFont * 0.8;
+if (name.length > 25) scaledFont = baseFont * 0.7;
+if (name.length > 35) scaledFont = baseFont * 0.6;
+
+scaledFont = Math.round(scaledFont);
 
   // --- SVG for participant name (perfectly centered) ---
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeW}" height="${safeH}">
@@ -242,7 +246,7 @@ async function generateCertificate(ev, data) {
         font-family: '${ev.nameFontFamily}', sans-serif;
         font-size: ${scaledFont}px;
         fill: ${ev.nameFontColor};
-        font-weight: 300;
+        font-weight: 500;
       }
     </style>
     <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="t">
@@ -353,6 +357,7 @@ app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
