@@ -1,6 +1,5 @@
 // ===============================
-// UEM Event Certificates - Complete Backend
-// Stable • Mail Enabled • Full Data Storage
+// UEM Event Certificates - Complete Backend (Stable + Mail + Full Data Flow)
 // ===============================
 
 require("dotenv").config();
@@ -20,7 +19,7 @@ const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
 
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
+const JWT_SECRET = process.env.JWT_SECRET || "cheakstar_secure_secret";
 const ADMIN_USER = process.env.ADMIN_USER || "admin@uem.com";
 const ADMIN_PASS = process.env.ADMIN_PASS || "UEM@12345";
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -33,6 +32,7 @@ const CERTS_DIR = path.join(UPLOAD_DIR, "certs");
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
+// Helpers
 const clampNum = (v, min, max) =>
   Math.max(min, Math.min(max, parseFloat(v || 0)));
 
@@ -68,7 +68,7 @@ let db;
       email_status TEXT, email_error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  console.log("✅ Database ready.");
+  console.log("✅ Database initialized");
 })();
 
 // ========== App Setup ==========
@@ -79,15 +79,18 @@ app.use("/uploads", express.static(UPLOAD_DIR));
 
 // ========== Auth ==========
 function generateToken() {
-  return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: "7d" }); // longer expiry
+  return jwt.sign({ user: ADMIN_USER }, JWT_SECRET, { expiresIn: "7d" });
 }
+
 function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.split(" ")[1] || req.query.token;
+  const token =
+    req.headers.authorization?.split(" ")[1] || req.query.token || null;
   if (!token) return res.status(401).json({ error: "Unauthorized" });
   try {
     jwt.verify(token, JWT_SECRET);
     next();
-  } catch {
+  } catch (err) {
+    console.error("JWT verification failed:", err.message);
     res.status(401).json({ error: "Invalid token" });
   }
 }
@@ -111,7 +114,7 @@ app.post("/api/upload-template", upload.single("template"), async (req, res) => 
       height: meta.height,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Upload error:", err);
     res.status(500).json({ error: "Upload failed", details: err.message });
   }
 });
@@ -149,8 +152,10 @@ app.post("/api/events", authMiddleware, async (req, res) => {
       formLink: `${BASE_URL}/form/${id}`,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to create event", details: err.message });
+    console.error("Create event error:", err);
+    res
+      .status(500)
+      .json({ error: "Failed to create event", details: err.message });
   }
 });
 
@@ -165,7 +170,7 @@ app.get("/api/events", authMiddleware, async (_, res) => {
   }
 });
 
-// ========== Generate Certificate + Send Mail ==========
+// ========== Generate Certificate + Mail ==========
 app.post("/api/submit/:eventId", async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
@@ -178,11 +183,12 @@ app.post("/api/submit/:eventId", async (req, res) => {
 
     const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
     const meta = await sharp(tplFull).metadata();
-    const tplW = meta.width, tplH = meta.height;
-    const PREVIEW_W = 1100, PREVIEW_H = 850;
+    const tplW = meta.width,
+      tplH = meta.height;
+    const PREVIEW_W = 1100,
+      PREVIEW_H = 850;
     const scaleY = tplH / PREVIEW_H;
 
-    // Name box dimensions
     const nbx = ev.nameBoxX * tplW;
     const nby = ev.nameBoxY * tplH;
     const nbw = ev.nameBoxW * tplW;
@@ -196,7 +202,9 @@ app.post("/api/submit/:eventId", async (req, res) => {
     const textY = nbh / 2 + scaledFontSize * 0.3;
 
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${nbw * 1.5}" height="${nbh * 1.5}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${nbw * 1.6}" height="${
+      nbh * 1.6
+    }">
         <style>
           .t {
             font-family: '${ev.nameFontFamily}', sans-serif;
@@ -210,7 +218,8 @@ app.post("/api/submit/:eventId", async (req, res) => {
       </svg>`;
     const svgBuf = Buffer.from(svg);
 
-    const qrSize = 50, qrMargin = 30;
+    const qrSize = 50,
+      qrMargin = 30;
     const qrBuffer = await QRCode.toBuffer(
       `${name} participated in ${ev.name} organized by ${ev.orgBy} on ${ev.date}.`,
       { type: "png", width: qrSize }
@@ -232,10 +241,18 @@ app.post("/api/submit/:eventId", async (req, res) => {
     await db.run(
       `INSERT INTO responses (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
        VALUES (?,?,?,?,?,?,?,?,?)`,
-      eId, name, email, mobile, dept, year, enroll, certRel, "generated"
+      eId,
+      name,
+      email,
+      mobile,
+      dept,
+      year,
+      enroll,
+      certRel,
+      "generated"
     );
 
-    // ✅ Send mail with attachment
+    // ✅ Mail send
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       try {
         const transporter = nodemailer.createTransport({
@@ -256,13 +273,16 @@ app.post("/api/submit/:eventId", async (req, res) => {
         });
         await db.run(
           `UPDATE responses SET email_status='sent' WHERE email=? AND event_id=?`,
-          email, eId
+          email,
+          eId
         );
       } catch (mailErr) {
         console.error("Mail Error:", mailErr.message);
         await db.run(
           `UPDATE responses SET email_status='failed', email_error=? WHERE email=? AND event_id=?`,
-          mailErr.message, email, eId
+          mailErr.message,
+          email,
+          eId
         );
       }
     }
@@ -274,34 +294,60 @@ app.post("/api/submit/:eventId", async (req, res) => {
   }
 });
 
-// ========== Download All Data ==========
+// ========== Download Event Data ==========
 app.get("/api/download-data/:id", authMiddleware, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const ev = await db.get("SELECT * FROM events WHERE id=?", id);
     if (!ev) return res.status(404).json({ error: "Event not found" });
+
     const rows = await db.all("SELECT * FROM responses WHERE event_id=?", id);
 
     const csvHead = [
-      "id","name","email","mobile","dept","year","enroll",
-      "cert_path","email_status","email_error","created_at"
+      "id",
+      "name",
+      "email",
+      "mobile",
+      "dept",
+      "year",
+      "enroll",
+      "cert_path",
+      "email_status",
+      "email_error",
+      "created_at",
     ];
     const csv = [csvHead.join(",")];
     rows.forEach((r) =>
       csv.push(
-        [r.id, `"${r.name}"`, r.email, r.mobile, r.dept, r.year, r.enroll,
-         r.cert_path, r.email_status, `"${r.email_error}"`, r.created_at].join(",")
+        [
+          r.id,
+          `"${r.name}"`,
+          r.email,
+          r.mobile,
+          r.dept,
+          r.year,
+          r.enroll,
+          r.cert_path,
+          r.email_status,
+          `"${r.email_error}"`,
+          r.created_at,
+        ].join(",")
       )
     );
     const csvBuf = Buffer.from(csv.join("\n"));
+
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename=event-${id}-data.zip`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=event-${id}-data.zip`
+    );
     const zip = archiver("zip", { zlib: { level: 9 } });
     zip.pipe(res);
     zip.append(csvBuf, { name: `event-${id}-data.csv` });
     rows.forEach((r) => {
       const f = path.join(__dirname, r.cert_path.replace(/^\//, ""));
-      if (fs.existsSync(f)) zip.file(f, { name: `certs/${path.basename(f)}` });
+      if (fs.existsSync(f))
+        zip.file(f, { name: `certs/${path.basename(f)}` });
     });
     await zip.finalize();
   } catch (err) {
@@ -376,7 +422,9 @@ app.get("/form/:id", async (req, res) => {
 // ========== Helpers ==========
 function escapeXml(unsafe) {
   return unsafe.replace(/[<>&'"]/g, (c) =>
-    ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c])
+    ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[
+      c
+    ])
   );
 }
 
@@ -384,4 +432,6 @@ app.get("/api/test", (_, res) =>
   res.json({ success: true, message: "Backend is running fine!" })
 );
 
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 Server running on port ${PORT} (BASE_URL: ${BASE_URL})`)
+);
