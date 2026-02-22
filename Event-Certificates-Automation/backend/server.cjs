@@ -525,7 +525,6 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 });
 
 const csvParse = require("csv-parse/sync");
-const archiver = require("archiver");
 
 /* ================= BULK GENERATE ================= */
 
@@ -906,7 +905,6 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "No IDs provided" });
 
     const ids = req.query.ids.split(",");
-    const archiver = require("archiver");
     const archive = archiver("zip", { zlib: { level: 9 } });
 
     res.attachment("multiple_events_data.zip");
