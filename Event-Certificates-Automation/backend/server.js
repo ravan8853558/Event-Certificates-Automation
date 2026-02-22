@@ -602,8 +602,7 @@ a:hover {
   }
 });
 
-
-/* ===== SEND EMAIL ===== */
+// ===== SEND EMAIL =====
 try {
   const certBuffer = fs.readFileSync(certFull);
 
@@ -618,31 +617,48 @@ try {
       to: email,
       subject: `🎓 Certificate - ${ev.name}`,
       html: `
-        <p>Dear <b>${name}</b>,</p>
+        <p>Dear <b>${safeName}</b>,</p>
         <p>You successfully participated in <b>${ev.name}</b>.</p>
         <p>Your certificate is attached below.</p>
         <br/>
         <p>Regards,<br/><b>${ev.orgBy}</b></p>
       `,
       attachments: [{
-        filename: `${name.replace(/[^\w]/g,"_")}.png`,
+        filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
         content: certBuffer.toString("base64"),
         encoding: "base64"
       }]
     })
   });
 
-  if (!response.ok) {
+  if (response.ok) {
+    await db.run(
+      "UPDATE responses SET email_status=? WHERE cert_path=?",
+      "sent",
+      certRel
+    );
+  } else {
     const errText = await response.text();
-    console.log("Resend error:", errText);
+    await db.run(
+      "UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?",
+      "failed",
+      errText,
+      certRel
+    );
   }
 
 } catch (err) {
-  console.log("Email failed:", err.message);
+  await db.run(
+    "UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?",
+    "failed",
+    err.message,
+    certRel
+  );
 }
 
 // ================= START =================
 app.listen(PORT, () => console.log("Server Running"));
+
 
 
 
