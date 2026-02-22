@@ -319,32 +319,41 @@ async function generateCertificate(ev, data) {
   fontSize = Math.round(fontSize);
 
   const svg = `
-  <svg width="${boxW}" height="${boxH}">
-    <text x="50%" y="50%"
-      font-family="${ev.nameFontFamily}"
-      font-size="${fontSize}"
-      fill="${ev.nameFontColor}"
-      text-anchor="middle"
-      dominant-baseline="middle"
-      font-weight="600">
+  <svg width="${boxW}" height="${boxH}" viewBox="0 0 ${boxW} ${boxH}">
+    <style>
+    .t {
+      font-family: '${ev.nameFontFamily}', sans-serif;
+      font-size: ${fontSize}px;
+      fill: ${ev.nameFontColor};
+      font-weight: 600;
+      text-anchor: middle;
+      dominant-baseline: middle;
+    }
+    </style>
+     <text x="50%" y="50%" class="t">
       ${name}
     </text>
   </svg>`;
 
   // ===== QR SIZE & POSITION (SAFE INSIDE IMAGE) =====
-  const qrSizePx = Math.round(ev.qrSize * tplW);
-  const padding = Math.round(tplW * 0.03); // 3% margin inside image
-
+  const qrSizePx = Math.max(Math.round(ev.qrSize * tplW), 150);
+  
+  const padding = Math.round(tplW * 0.04); // 4% margin
   const qrLeft = tplW - qrSizePx - padding;
   const qrTop = tplH - qrSizePx - padding;
-
+  
   const qrToken = jwt.sign({ event: ev.id, name }, JWT_SECRET, { expiresIn: "30d" });
 
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify/${qrToken}`,
     {
       width: qrSizePx,
-      margin: 2
+      errorCorrectionLevel: "H",  // HIGH redundancy
+      margin: 4,                  // Proper white space
+      color: {
+        dark: "#000000",
+        light: "#FFFFFF"
+      }
     }
   );
 
@@ -472,5 +481,6 @@ app.get("/verify/:token", async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () => console.log("Server Running"));
+
 
 
