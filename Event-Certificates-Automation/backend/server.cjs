@@ -1,4 +1,5 @@
 require("dotenv").config();
+const ExcelJS = require("exceljs");
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
@@ -290,7 +291,7 @@ app.get("/form/:id", async (req, res) => {
       </form>
 
       <div class="footer">
-        UEM Certificate Automation System
+        Certificate Automation System
       </div>
     </div>
   </body>
@@ -578,29 +579,34 @@ a:hover {
   }
 });
 
-// ========= DOWNLOAD EVENT EXCEL =========
+/* ========= DOWNLOAD SINGLE EVENT EXCEL ========= */
 app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
   try {
     const eId = parseInt(req.params.eventId);
 
-    const event = await db.get("SELECT * FROM events WHERE id=?", eId);
+    const event = await db.get(
+      "SELECT * FROM events WHERE id=?",
+      eId
+    );
+
     if (!event)
       return res.status(404).json({ error: "Event not found" });
 
     const responses = await db.all(
-      `SELECT name, email, mobile, dept, year, enroll, cert_path, email_status, created_at 
-       FROM responses 
-       WHERE event_id=?`,
+      `SELECT name, email, mobile, dept, year, enroll,
+              cert_path, email_status, created_at
+       FROM responses
+       WHERE event_id=?
+       ORDER BY created_at DESC`,
       eId
     );
 
-    if (responses.length === 0)
+    if (!responses.length)
       return res.status(404).json({ error: "No responses found" });
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Event Data");
 
-    // Column Headers
     worksheet.columns = [
       { header: "Name", key: "name", width: 25 },
       { header: "Email", key: "email", width: 30 },
@@ -613,7 +619,6 @@ app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
       { header: "Submitted At", key: "created_at", width: 20 }
     ];
 
-    // Add Rows
     responses.forEach(r => {
       worksheet.addRow({
         name: r.name,
@@ -622,22 +627,27 @@ app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
         dept: r.dept,
         year: r.year,
         enroll: r.enroll,
-        cert_link: `${BASE_URL}${r.cert_path}`,
+        cert_link: {
+          text: "View Certificate",
+          hyperlink: `${BASE_URL}${r.cert_path}`
+        },
         email_status: r.email_status,
         created_at: r.created_at
       });
     });
 
-    // Bold header
     worksheet.getRow(1).font = { bold: true };
+
+    const safeName = event.name.replace(/[^\w]/g, "_");
 
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
+
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=event_${eId}_data.xlsx`
+      `attachment; filename=${safeName}.xlsx`
     );
 
     await workbook.xlsx.write(res);
@@ -649,45 +659,83 @@ app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
   }
 });
 
-app.delete("/api/events/:id", authMiddleware, async (req,res)=>{
-  await db.run("DELETE FROM events WHERE id=?", req.params.id);
-  res.json({ success:true });
-});
 
-app.post("/api/delete-multiple-events", authMiddleware, async (req,res)=>{
-  const { ids } = req.body;
-
-  for (const id of ids) {
-    await db.run("DELETE FROM events WHERE id=?", id);
+/* ========= DELETE SINGLE EVENT ========= */
+app.delete("/api/events/:id", authMiddleware, async (req, res) => {
+  try {
+    await db.run("DELETE FROM events WHERE id=?", req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Delete failed" });
   }
-
-  res.json({ success:true });
 });
 
-app.get("/api/download-multiple-excel", authMiddleware, async (req,res)=>{
-  const ids = req.query.ids.split(",");
 
-  const archiver = require("archiver");
-  const archive = archiver("zip", { zlib:{level:9} });
+/* ========= DELETE MULTIPLE EVENTS ========= */
+app.post("/api/delete-multiple-events", authMiddleware, async (req, res) => {
+  try {
+    const { ids } = req.body;
 
-  res.attachment("multiple_events_excel.zip");
-  archive.pipe(res);
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ error: "No IDs provided" });
 
-  for (const id of ids) {
-    const event = await db.get("SELECT * FROM events WHERE id=?", id);
-    const responses = await db.all("SELECT * FROM responses WHERE event_id=?", id);
+    const placeholders = ids.map(() => "?").join(",");
 
-    let csv = "Name,Email,Mobile,Dept,Year,Enroll,Certificate\n";
-    responses.forEach(r=>{
-      csv += `${r.name},${r.email},${r.mobile},${r.dept},${r.year},${r.enroll},${BASE_URL}${r.cert_path}\n`;
-    });
+    await db.run(
+      `DELETE FROM events WHERE id IN (${placeholders})`,
+      ids
+    );
 
-    archive.append(csv, { name: `${event.name}.csv` });
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ error: "Bulk delete failed" });
   }
-
-  archive.finalize();
 });
 
+
+/* ========= DOWNLOAD MULTIPLE EVENTS (ZIP of CSVs) ========= */
+app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
+  try {
+    if (!req.query.ids)
+      return res.status(400).json({ error: "No IDs provided" });
+
+    const ids = req.query.ids.split(",");
+    const archiver = require("archiver");
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    res.attachment("multiple_events_data.zip");
+    archive.pipe(res);
+
+    for (const id of ids) {
+      const event = await db.get("SELECT * FROM events WHERE id=?", id);
+      if (!event) continue;
+
+      const responses = await db.all(
+        "SELECT * FROM responses WHERE event_id=?",
+        id
+      );
+
+      if (!responses.length) continue;
+
+      let csv = "Name,Email,Mobile,Dept,Year,Enroll,Certificate\n";
+
+      responses.forEach(r => {
+        csv += `"${r.name}","${r.email}","${r.mobile}","${r.dept}",
+"${r.year}","${r.enroll}","${BASE_URL}${r.cert_path}"\n`;
+      });
+
+      const safeName = event.name.replace(/[^\w]/g, "_");
+      archive.append(csv, { name: `${safeName}.csv` });
+    }
+
+    await archive.finalize();
+
+  } catch (err) {
+    console.error("Multiple Excel download error:", err);
+    res.status(500).json({ error: "Failed to generate ZIP file" });
+  }
+});
 
 /* ================= START ================= */
 
