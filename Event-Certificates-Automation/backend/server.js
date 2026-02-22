@@ -218,6 +218,7 @@ async function generateCertificate(ev, data) {
   // --- Name box positioning ---
   const nbx = ev.nameBoxX * tplW;
   const nby = ev.nameBoxY * tplH;
+  const nbw = ev.nameBoxW * tplW;
   const nbh = ev.nameBoxH * tplH;
 
   // --- Font scaling logic (adaptive font size) ---
@@ -232,7 +233,7 @@ if (name.length > 35) scaledFont = baseFont * 0.6;
 scaledFont = Math.round(scaledFont);
 
   // --- SVG for participant name (perfectly centered) ---
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeW}" height="${safeH}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${nbw}" height="${nbh}">
     <style>
       .t {
         font-family: '${ev.nameFontFamily}', sans-serif;
@@ -273,9 +274,9 @@ scaledFont = Math.round(scaledFont);
   const qrY = Math.round(tplH - qrSizePx - padding);
 
   // --- Adjust SVG centering relative to name box ---
-  const svgLeft = Math.round(nbx - (safeW - nbw) / 2);
-  const svgTop = Math.round(nby - (safeH - nbh) / 2);
-
+  const svgLeft = Math.round(nbx - nbw / 2);
+  const svgTop = Math.round(nby - nbh / 2);
+  
   // --- Generate final certificate ---
   const certFile = `${Date.now()}-${uuidv4()}.png`;
   const certFull = path.join(CERTS_DIR, certFile);
@@ -447,6 +448,7 @@ app.get("/api/download-data/:eventId", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
