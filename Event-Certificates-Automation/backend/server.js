@@ -189,16 +189,112 @@ app.get("/form/:id", async (req, res) => {
   if (!ev) return res.status(404).send("Event not found");
 
   res.send(`
-    <html>
-      <body style="font-family:sans-serif;text-align:center;padding:50px">
-        <h2>${ev.name}</h2>
-        <form method="POST" action="/api/submit/${ev.id}">
-          <input name="name" placeholder="Full Name" required/><br/><br/>
-          <input name="email" type="email" placeholder="Email" required/><br/><br/>
-          <button>Generate Certificate</button>
-        </form>
-      </body>
-    </html>
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>${ev.name} - Registration</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+      * { box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+      body {
+        margin:0;
+        min-height:100vh;
+        background: linear-gradient(135deg,#0f172a,#1e293b);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:20px;
+      }
+
+      .card {
+        background: rgba(255,255,255,0.08);
+        backdrop-filter: blur(18px);
+        border-radius:20px;
+        padding:40px;
+        width:100%;
+        max-width:550px;
+        box-shadow:0 20px 40px rgba(0,0,0,0.35);
+        color:white;
+      }
+
+      h2 {
+        margin-bottom:5px;
+      }
+
+      .subtitle {
+        font-size:14px;
+        opacity:0.8;
+        margin-bottom:25px;
+      }
+
+      input {
+        width:100%;
+        padding:14px;
+        margin-bottom:15px;
+        border-radius:10px;
+        border:none;
+        font-size:14px;
+        outline:none;
+      }
+
+      input:focus {
+        box-shadow:0 0 0 2px #38bdf8;
+      }
+
+      button {
+        width:100%;
+        padding:14px;
+        border-radius:10px;
+        border:none;
+        background: linear-gradient(135deg,#38bdf8,#0ea5e9);
+        color:white;
+        font-weight:600;
+        cursor:pointer;
+        transition:0.3s;
+      }
+
+      button:hover {
+        transform:translateY(-2px);
+        box-shadow:0 10px 20px rgba(56,189,248,0.4);
+      }
+
+      .footer {
+        text-align:center;
+        margin-top:15px;
+        font-size:12px;
+        opacity:0.7;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="card">
+      <h2>${ev.name}</h2>
+      <div class="subtitle">
+        Organized by ${ev.orgBy} • ${ev.date}
+      </div>
+
+      <form method="POST" action="/api/submit/${ev.id}">
+        <input name="name" placeholder="Full Name" required/>
+        <input name="email" type="email" placeholder="Email Address" required/>
+        <input name="mobile" placeholder="Mobile Number" required/>
+        <input name="dept" placeholder="Department"/>
+        <input name="year" placeholder="Year"/>
+        <input name="enroll" placeholder="Enrollment No"/>
+        <button type="submit">Generate Certificate</button>
+      </form>
+
+      <div class="footer">
+        UEM Certificate Automation System
+      </div>
+    </div>
+  </body>
+  </html>
   `);
 });
 
@@ -237,7 +333,7 @@ async function generateCertificate(ev, data) {
   const qrToken = jwt.sign({ event: ev.id, name }, JWT_SECRET, { expiresIn: "30d" });
 
   const qrBuffer = await QRCode.toBuffer(`${BASE_URL}/verify/${qrToken}`, {
-    width: Math.round(ev.qrSize * tplW),
+    width: qrSizePx,
     margin: 2
   });
 
@@ -247,8 +343,13 @@ async function generateCertificate(ev, data) {
   await sharp(tplFull)
     .composite([
       { input: Buffer.from(svg), left: Math.round(centerX - boxW / 2), top: Math.round(centerY - boxH / 2) },
-      { input: qrBuffer, left: tplW - 180, top: tplH - 180 }
-    ])
+  const qrSizePx = Math.round(ev.qrSize * tplW);
+  const padding = Math.round(tplW * 0.03); // 3% safe margin
+
+  const qrLeft = tplW - qrSizePx - padding;
+  const qrTop = tplH - qrSizePx - padding;
+
+      { input: qrBuffer, left: qrLeft, top: qrTop }    ])
     .png()
     .toFile(certFull);
 
@@ -269,7 +370,69 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 
   const cert = await generateCertificate(ev, req.body);
 
-  res.send(`<h2>Certificate Generated</h2><a href="${cert}">Download</a>`);
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Certificate Generated</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+<style>
+* { box-sizing:border-box; font-family:'Poppins',sans-serif; }
+
+body {
+  margin:0;
+  min-height:100vh;
+  background:linear-gradient(135deg,#0f172a,#1e293b);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.card {
+  background:rgba(255,255,255,0.08);
+  backdrop-filter:blur(18px);
+  padding:50px;
+  border-radius:20px;
+  text-align:center;
+  color:white;
+  max-width:500px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.4);
+}
+
+h2 {
+  margin-bottom:20px;
+}
+
+a {
+  display:inline-block;
+  padding:12px 20px;
+  background:linear-gradient(135deg,#38bdf8,#0ea5e9);
+  border-radius:10px;
+  color:white;
+  text-decoration:none;
+  font-weight:600;
+  margin-top:10px;
+}
+
+a:hover {
+  transform:translateY(-2px);
+}
+</style>
+</head>
+
+<body>
+  <div class="card">
+    <h2>🎉 Certificate Generated Successfully!</h2>
+    <p>Your certificate is ready.</p>
+    <a href="${cert}" target="_blank">Download Certificate</a>
+  </div>
+</body>
+</html>
+`);
 });
 
 // ================= VERIFY =================
@@ -284,3 +447,4 @@ app.get("/verify/:token", async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () => console.log("Server Running"));
+
