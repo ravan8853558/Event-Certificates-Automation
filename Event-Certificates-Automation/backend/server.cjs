@@ -1,5 +1,7 @@
 require("dotenv").config();
 const ExcelJS = require("exceljs");
+const archiver = require("archiver");
+const { parse } = require("csv-parse/sync");
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
@@ -35,6 +37,12 @@ const TEMP_DIR = path.join(__dirname, "temp");
 [UPLOAD_DIR, TEMPLATE_DIR, CERT_DIR, TEMP_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
+
+const BULK_DIR = path.join(__dirname, "bulk_uploads");
+
+if (!fs.existsSync(BULK_DIR)) {
+  fs.mkdirSync(BULK_DIR, { recursive: true });
+}
 
 /* ================= EXPRESS ================= */
 
@@ -181,6 +189,60 @@ app.post("/api/events", authMiddleware, async (req, res) => {
 app.get("/api/events", authMiddleware, async (_, res) => {
   const rows = await db.all("SELECT * FROM events ORDER BY id DESC");
   res.json({ success: true, data: rows });
+});
+
+/* ================= BULK FILE UPLOAD ================= */
+
+const bulkUpload = multer({ dest: BULK_DIR });
+
+app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (req, res) => {
+  try {
+    if (!req.file)
+      return res.status(400).json({ error: "No file uploaded" });
+
+    const filePath = req.file.path;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+
+    let rows = [];
+
+    if (ext === ".csv") {
+      const content = fs.readFileSync(filePath);
+      rows = parse(content, { columns: true, skip_empty_lines: true });
+    } 
+    else if (ext === ".xlsx") {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      const sheet = workbook.worksheets[0];
+
+      const headers = sheet.getRow(1).values.slice(1);
+
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+
+        let obj = {};
+        headers.forEach((h, i) => {
+          obj[h] = row.getCell(i + 1).value;
+        });
+
+        rows.push(obj);
+      });
+    } 
+    else {
+      return res.status(400).json({ error: "Only CSV or XLSX allowed" });
+    }
+
+    const columns = Object.keys(rows[0] || {});
+
+    res.json({
+      success: true,
+      columns,
+      previewCount: rows.length,
+      tempFile: filePath
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: "Bulk upload failed" });
+  }
 });
 
 // ================= PUBLIC FORM =================
@@ -460,6 +522,83 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 </body>
 </html>
 `);
+});
+
+/* ================= BULK GENERATE ================= */
+
+app.post("/api/bulk/generate", authMiddleware, async (req, res) => {
+  try {
+    const { eventId, nameColumn, tempFile } = req.body;
+
+    const ev = await db.get("SELECT * FROM events WHERE id=?", eventId);
+    if (!ev) return res.status(404).json({ error: "Event not found" });
+
+    const ext = path.extname(tempFile).toLowerCase();
+    let rows = [];
+
+    if (ext === ".csv") {
+      const content = fs.readFileSync(tempFile);
+      rows = parse(content, { columns: true, skip_empty_lines: true });
+    } else {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(tempFile);
+      const sheet = workbook.worksheets[0];
+
+      const headers = sheet.getRow(1).values.slice(1);
+
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+
+        let obj = {};
+        headers.forEach((h, i) => {
+          obj[h] = row.getCell(i + 1).value;
+        });
+
+        rows.push(obj);
+      });
+    }
+
+    const zip = archiver("zip", { zlib: { level: 9 } });
+
+    res.attachment("bulk_certificates.zip");
+    zip.pipe(res);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Participants");
+
+    const headers = Object.keys(rows[0]);
+    sheet.columns = [
+      ...headers.map(h => ({ header: h, key: h })),
+      { header: "Certificate Link", key: "cert_link" }
+    ];
+
+    for (let row of rows) {
+      const name = row[nameColumn];
+      if (!name) continue;
+
+      const certRel = await generateCertificate(ev, {
+        name,
+        email: ""
+      });
+
+      zip.file(path.join(__dirname, certRel), { name: path.basename(certRel) });
+
+      sheet.addRow({
+        ...row,
+        cert_link: `${BASE_URL}${certRel}`
+      });
+    }
+
+    const tempExcel = path.join(TEMP_DIR, `bulk-${Date.now()}.xlsx`);
+    await workbook.xlsx.writeFile(tempExcel);
+
+    zip.file(tempExcel, { name: "participants_with_links.xlsx" });
+
+    await zip.finalize();
+
+  } catch (err) {
+    res.status(500).json({ error: "Bulk generation failed" });
+  }
 });
 
 // ================= VERIFY =================
