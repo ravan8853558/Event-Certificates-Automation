@@ -1,9 +1,9 @@
 {
   "name": "uem-event-certificates-backend",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "server.cjs",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.cjs"
   },
   "dependencies": {
     "archiver": "^6.0.2",
@@ -23,6 +23,7 @@
     "node-fetch": "^3.3.2"
   }
 }
+
 
 
 
