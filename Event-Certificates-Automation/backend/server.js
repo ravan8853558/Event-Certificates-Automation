@@ -299,7 +299,7 @@ app.get("/form/:id", async (req, res) => {
 });
 
 // ================= CERTIFICATE GENERATION =================
-async function generateCertificate(ev, data) {
+  async function generateCertificate(ev, data) {
   const { name, email, mobile, dept, year, enroll } = data;
 
   const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
@@ -312,44 +312,64 @@ async function generateCertificate(ev, data) {
   const boxW = ev.nameBoxW * tplW;
   const boxH = ev.nameBoxH * tplH;
 
-  // ===== Adaptive Font Scaling =====
-  let fontSize = ev.nameFontSize;
-  if (name.length > 18) fontSize *= 0.85;
-  if (name.length > 28) fontSize *= 0.75;
-  fontSize = Math.round(fontSize);
+  // ================= SAFE TEXT HANDLING =================
+  const safeName = String(name).trim();
 
+  // Proper adaptive font scaling (not stupid length based)
+  let fontSize = ev.nameFontSize;
+
+  const approxTextWidth = safeName.length * (fontSize * 0.6);
+
+  if (approxTextWidth > boxW) {
+    fontSize = Math.floor((boxW / approxTextWidth) * fontSize * 0.95);
+  }
+
+  fontSize = Math.max(fontSize, 18); // never too small
+
+  // ================= SVG TEXT =================
   const svg = `
-  <svg width="${boxW}" height="${boxH}" viewBox="0 0 ${boxW} ${boxH}">
-    <style>
-    .t {
-      font-family: '${ev.nameFontFamily}', sans-serif;
-      font-size: ${fontSize}px;
-      fill: ${ev.nameFontColor};
-      font-weight: 600;
-      text-anchor: middle;
-      dominant-baseline: middle;
-    }
-    </style>
-     <text x="50%" y="50%" class="t">
-      ${name}
+  <svg xmlns="http://www.w3.org/2000/svg"
+       width="${boxW}"
+       height="${boxH}"
+       viewBox="0 0 ${boxW} ${boxH}">
+    <text
+      x="${boxW / 2}"
+      y="${boxH / 2}"
+      font-family="${ev.nameFontFamily}"
+      font-size="${fontSize}"
+      fill="${ev.nameFontColor}"
+      font-weight="600"
+      text-anchor="middle"
+      dominant-baseline="middle">
+      ${safeName}
     </text>
   </svg>`;
 
-  // ===== QR SIZE & POSITION (SAFE INSIDE IMAGE) =====
-  const qrSizePx = Math.max(Math.round(ev.qrSize * tplW), 150);
-  
-  const padding = Math.round(tplW * 0.04); // 4% margin
+  // ================= QR CODE =================
+
+  const qrToken = jwt.sign(
+    { event: ev.id, name: safeName },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+
+  // Better QR sizing logic
+  let qrSizePx = Math.round(ev.qrSize * tplW);
+
+  qrSizePx = Math.max(qrSizePx, 180);  // minimum
+  qrSizePx = Math.min(qrSizePx, tplW * 0.25); // maximum 25% width
+
+  const padding = Math.round(tplW * 0.04);
+
   const qrLeft = tplW - qrSizePx - padding;
   const qrTop = tplH - qrSizePx - padding;
-  
-  const qrToken = jwt.sign({ event: ev.id, name }, JWT_SECRET, { expiresIn: "30d" });
 
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify/${qrToken}`,
     {
       width: qrSizePx,
-      errorCorrectionLevel: "H",  // HIGH redundancy
-      margin: 4,                  // Proper white space
+      errorCorrectionLevel: "H",
+      margin: 6,
       color: {
         dark: "#000000",
         light: "#FFFFFF"
@@ -357,10 +377,11 @@ async function generateCertificate(ev, data) {
     }
   );
 
+  // ================= CERT SAVE =================
+
   const certFile = `${Date.now()}-${uuidv4()}.png`;
   const certFull = path.join(CERT_DIR, certFile);
 
-  // ===== FINAL COMPOSITE =====
   await sharp(tplFull)
     .composite([
       {
@@ -370,11 +391,11 @@ async function generateCertificate(ev, data) {
       },
       {
         input: qrBuffer,
-        left: qrLeft,
-        top: qrTop
+        left: Math.round(qrLeft),
+        top: Math.round(qrTop)
       }
     ])
-    .png()
+    .png({ quality: 100 })
     .toFile(certFull);
 
   const certRel = `/uploads/certs/${certFile}`;
@@ -384,7 +405,7 @@ async function generateCertificate(ev, data) {
      (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
      VALUES (?,?,?,?,?,?,?,?,?)`,
     ev.id,
-    name,
+    safeName,
     email,
     mobile || "",
     dept || "",
@@ -481,6 +502,7 @@ app.get("/verify/:token", async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () => console.log("Server Running"));
+
 
 
 
