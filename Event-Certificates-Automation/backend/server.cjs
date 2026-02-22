@@ -332,7 +332,11 @@ async function generateCertificate(ev, data) {
     </text>
   </svg>`;
 
-  const qrToken = jwt.sign({ event: ev.id, name: safeName }, JWT_SECRET, { expiresIn: "30d" });
+  const qrToken = jwt.sign(
+    { event: ev.id, name: safeName },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
 
   let qrSizePx = Math.round(ev.qrSize * tplW);
   qrSizePx = Math.max(qrSizePx, 180);
@@ -376,9 +380,67 @@ async function generateCertificate(ev, data) {
     "generated"
   );
 
+  /* ===== SEND EMAIL ===== */
+
+  try {
+    const certBuffer = fs.readFileSync(certFull);
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: process.env.FROM_EMAIL,
+        to: email,
+        subject: `🎓 Certificate - ${ev.name}`,
+        html: `
+          <p>Dear <b>${safeName}</b>,</p>
+          <p>You successfully participated in <b>${ev.name}</b>.</p>
+          <p>Your certificate is attached.</p>
+        `,
+        attachments: [{
+          filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
+          content: certBuffer.toString("base64")
+        }]
+      })
+    });
+
+    if (response.ok) {
+      await db.run(
+        `UPDATE responses SET email_status=? WHERE cert_path=?`,
+        "sent",
+        certRel
+      );
+    } else {
+      await db.run(
+        `UPDATE responses SET email_status=? WHERE cert_path=?`,
+        "failed",
+        certRel
+      );
+    }
+
+  } catch (err) {
+    await db.run(
+      `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+      "failed",
+      err.message,
+      certRel
+    );
+  }
+
+  return certRel;
+}
+
 // ================= SUBMIT =================
+
 app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
-  const ev = await db.get("SELECT * FROM events WHERE id=?", req.params.eventId);
+  const ev = await db.get(
+    "SELECT * FROM events WHERE id=?",
+    req.params.eventId
+  );
+
   if (!ev) return res.status(404).send("Event not found");
 
   const cert = await generateCertificate(ev, req.body);
@@ -388,61 +450,12 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 <html>
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Certificate Generated</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
-
-<style>
-* { box-sizing:border-box; font-family:'Poppins',sans-serif; }
-
-body {
-  margin:0;
-  min-height:100vh;
-  background:linear-gradient(135deg,#0f172a,#1e293b);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.card {
-  background:rgba(255,255,255,0.08);
-  backdrop-filter:blur(18px);
-  padding:50px;
-  border-radius:20px;
-  text-align:center;
-  color:white;
-  max-width:500px;
-  box-shadow:0 20px 40px rgba(0,0,0,0.4);
-}
-
-h2 {
-  margin-bottom:20px;
-}
-
-a {
-  display:inline-block;
-  padding:12px 20px;
-  background:linear-gradient(135deg,#38bdf8,#0ea5e9);
-  border-radius:10px;
-  color:white;
-  text-decoration:none;
-  font-weight:600;
-  margin-top:10px;
-}
-
-a:hover {
-  transform:translateY(-2px);
-}
-</style>
 </head>
-
-<body>
-  <div class="card">
-    <h2>🎉 Certificate Generated Successfully!</h2>
-    <p>Your certificate is ready.</p>
-    <a href="${cert}" target="_blank">Download Certificate</a>
-  </div>
+<body style="font-family:sans-serif;text-align:center;padding:40px">
+  <h2>🎉 Certificate Generated Successfully!</h2>
+  <p>Your certificate is ready.</p>
+  <a href="${cert}" target="_blank">Download Certificate</a>
 </body>
 </html>
 `);
@@ -453,15 +466,18 @@ app.get("/verify/:token", async (req, res) => {
   try {
     const data = jwt.verify(req.params.token, JWT_SECRET);
 
+    const eventId = data.event;
+    const participantName = String(data.name).trim();
+
     const ev = await db.get(
-      "SELECT * FROM events WHERE id=?",
-      data.event
+      "SELECT * FROM events WHERE id = ?",
+      eventId
     );
 
     const rec = await db.get(
-      "SELECT * FROM responses WHERE event_id=? AND name=?",
-      data.event,
-      data.name
+      "SELECT * FROM responses WHERE event_id = ? AND TRIM(name) = ?",
+      eventId,
+      participantName
     );
 
     if (!ev || !rec) {
@@ -551,7 +567,8 @@ a:hover {
   </div>
 </body>
 </html>
-`);
+    `);
+
   } catch (err) {
     res.status(400).send(`
       <h2 style="color:red;text-align:center;margin-top:40px;">
@@ -560,41 +577,6 @@ a:hover {
     `);
   }
 });
-
-  /* ===== SEND EMAIL ===== */
-  try {
-    const certBuffer = fs.readFileSync(certFull);
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: process.env.FROM_EMAIL,
-        to: email,
-        subject: `🎓 Certificate - ${ev.name}`,
-        html: `<p>Dear ${safeName},</p>
-               <p>You successfully participated in ${ev.name}.</p>`,
-        attachments: [{
-          filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
-          content: certBuffer.toString("base64")
-        }]
-      })
-    });
-
-    if (response.ok) {
-      await db.run(`UPDATE responses SET email_status=? WHERE cert_path=?`,
-        "sent", certRel);
-    }
-  } catch (err) {
-    await db.run(`UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
-      "failed", err.message, certRel);
-  }
-
-  return certRel;
-}
 
 /* ================= START ================= */
 
