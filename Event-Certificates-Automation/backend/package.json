@@ -8,6 +8,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "exceljs": "^4.4.0",
+    "xlsx": "^0.18.5"
     "archiver": "^6.0.2",
     "csv-parse": "^5.5.0",
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
     "uuid": "^9.0.1"
   }
 }
+
 
 
 
