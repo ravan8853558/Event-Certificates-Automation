@@ -218,12 +218,7 @@ async function generateCertificate(ev, data) {
   // --- Name box positioning ---
   const nbx = ev.nameBoxX * tplW;
   const nby = ev.nameBoxY * tplH;
-  const nbw = ev.nameBoxW * tplW * 1.2;
   const nbh = ev.nameBoxH * tplH;
-
-  // --- Expand text box slightly to avoid clipping ---
-  const safeW = nbw * 2.4;
-  const safeH = nbh * 2.0;
 
   // --- Font scaling logic (adaptive font size) ---
 const baseFont = Math.max(10, ev.nameFontSize || 34);
@@ -452,6 +447,7 @@ app.get("/api/download-data/:eventId", authMiddleware, async (req, res) => {
 
 // ====== START SERVER ======
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running at ${BASE_URL}`));
+
 
 
 
