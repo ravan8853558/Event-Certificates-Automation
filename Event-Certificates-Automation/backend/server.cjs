@@ -649,6 +649,46 @@ app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
   }
 });
 
+app.delete("/api/events/:id", authMiddleware, async (req,res)=>{
+  await db.run("DELETE FROM events WHERE id=?", req.params.id);
+  res.json({ success:true });
+});
+
+app.post("/api/delete-multiple-events", authMiddleware, async (req,res)=>{
+  const { ids } = req.body;
+
+  for (const id of ids) {
+    await db.run("DELETE FROM events WHERE id=?", id);
+  }
+
+  res.json({ success:true });
+});
+
+app.get("/api/download-multiple-excel", authMiddleware, async (req,res)=>{
+  const ids = req.query.ids.split(",");
+
+  const archiver = require("archiver");
+  const archive = archiver("zip", { zlib:{level:9} });
+
+  res.attachment("multiple_events_excel.zip");
+  archive.pipe(res);
+
+  for (const id of ids) {
+    const event = await db.get("SELECT * FROM events WHERE id=?", id);
+    const responses = await db.all("SELECT * FROM responses WHERE event_id=?", id);
+
+    let csv = "Name,Email,Mobile,Dept,Year,Enroll,Certificate\n";
+    responses.forEach(r=>{
+      csv += `${r.name},${r.email},${r.mobile},${r.dept},${r.year},${r.enroll},${BASE_URL}${r.cert_path}\n`;
+    });
+
+    archive.append(csv, { name: `${event.name}.csv` });
+  }
+
+  archive.finalize();
+});
+
+
 /* ================= START ================= */
 
 app.listen(PORT, () => console.log("Server Running on", PORT));
