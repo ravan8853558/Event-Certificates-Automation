@@ -6,13 +6,12 @@
     "start": "node server.cjs"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "exceljs": "^4.4.0",
-    "xlsx": "^0.18.5"
     "archiver": "^6.0.2",
-    "csv-parse": "^5.5.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "csv-parse": "^5.5.0",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "express-rate-limit": "^7.3.0",
     "jsonwebtoken": "^9.0.2",
@@ -22,10 +21,7 @@
     "sharp": "^0.33.2",
     "sqlite": "^4.2.1",
     "sqlite3": "^5.1.7",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "xlsx": "^0.18.5"
   }
 }
-
-
-
-
