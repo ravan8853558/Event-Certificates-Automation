@@ -578,6 +578,77 @@ a:hover {
   }
 });
 
+// ========= DOWNLOAD EVENT EXCEL =========
+app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
+  try {
+    const eId = parseInt(req.params.eventId);
+
+    const event = await db.get("SELECT * FROM events WHERE id=?", eId);
+    if (!event)
+      return res.status(404).json({ error: "Event not found" });
+
+    const responses = await db.all(
+      `SELECT name, email, mobile, dept, year, enroll, cert_path, email_status, created_at 
+       FROM responses 
+       WHERE event_id=?`,
+      eId
+    );
+
+    if (responses.length === 0)
+      return res.status(404).json({ error: "No responses found" });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Event Data");
+
+    // Column Headers
+    worksheet.columns = [
+      { header: "Name", key: "name", width: 25 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Mobile", key: "mobile", width: 15 },
+      { header: "Department", key: "dept", width: 20 },
+      { header: "Year", key: "year", width: 10 },
+      { header: "Enrollment", key: "enroll", width: 20 },
+      { header: "Certificate Link", key: "cert_link", width: 40 },
+      { header: "Email Status", key: "email_status", width: 15 },
+      { header: "Submitted At", key: "created_at", width: 20 }
+    ];
+
+    // Add Rows
+    responses.forEach(r => {
+      worksheet.addRow({
+        name: r.name,
+        email: r.email,
+        mobile: r.mobile,
+        dept: r.dept,
+        year: r.year,
+        enroll: r.enroll,
+        cert_link: `${BASE_URL}${r.cert_path}`,
+        email_status: r.email_status,
+        created_at: r.created_at
+      });
+    });
+
+    // Bold header
+    worksheet.getRow(1).font = { bold: true };
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=event_${eId}_data.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error("Excel download error:", err);
+    res.status(500).json({ error: "Failed to generate Excel file" });
+  }
+});
+
 /* ================= START ================= */
 
 app.listen(PORT, () => console.log("Server Running on", PORT));
