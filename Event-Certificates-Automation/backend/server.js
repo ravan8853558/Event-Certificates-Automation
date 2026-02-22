@@ -14,7 +14,7 @@ const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
 const QRCode = require("qrcode");
 const archiver = require("archiver");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const rateLimit = require("express-rate-limit");
 const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3").verbose();
@@ -245,3 +245,4 @@ async function generateCertificate(ev, name, email) {
 
 // ===== START =====
 app.listen(PORT, () => console.log("Server running"));
+
