@@ -297,8 +297,9 @@ app.get("/form/:id", async (req, res) => {
   `);
 });
 
-// ================= CERTIFICATE GENERATION =================
-  async function generateCertificate(ev, data) {
+
+//certificate genration ..............................
+async function generateCertificate(ev, data) {
   const { name, email, mobile, dept, year, enroll } = data;
 
   const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
@@ -311,40 +312,32 @@ app.get("/form/:id", async (req, res) => {
   const boxW = ev.nameBoxW * tplW;
   const boxH = ev.nameBoxH * tplH;
 
-  // ================= SAFE TEXT HANDLING =================
   const safeName = String(name).trim();
 
-  // Proper adaptive font scaling (not stupid length based)
   let fontSize = ev.nameFontSize;
+  const approxWidth = safeName.length * (fontSize * 0.6);
 
-  const approxTextWidth = safeName.length * (fontSize * 0.6);
-
-  if (approxTextWidth > boxW) {
-    fontSize = Math.floor((boxW / approxTextWidth) * fontSize * 0.95);
+  if (approxWidth > boxW) {
+    fontSize = Math.floor((boxW / approxWidth) * fontSize * 0.95);
   }
 
-  fontSize = Math.max(fontSize, 18); // never too small
+  fontSize = Math.max(fontSize, 18);
 
-  // ================= SVG TEXT =================
   const svg = `
   <svg xmlns="http://www.w3.org/2000/svg"
        width="${boxW}"
-       height="${boxH}"
-       viewBox="0 0 ${boxW} ${boxH}">
-    <text
-      x="${boxW / 2}"
-      y="${boxH / 2}"
-      font-family="${ev.nameFontFamily}"
-      font-size="${fontSize}"
-      fill="${ev.nameFontColor}"
-      font-weight="600"
-      text-anchor="middle"
-      dominant-baseline="middle">
+       height="${boxH}">
+    <text x="${boxW / 2}"
+          y="${boxH / 2}"
+          font-family="${ev.nameFontFamily}"
+          font-size="${fontSize}"
+          fill="${ev.nameFontColor}"
+          font-weight="600"
+          text-anchor="middle"
+          dominant-baseline="middle">
       ${safeName}
     </text>
   </svg>`;
-
-  // ================= QR CODE =================
 
   const qrToken = jwt.sign(
     { event: ev.id, name: safeName },
@@ -352,16 +345,11 @@ app.get("/form/:id", async (req, res) => {
     { expiresIn: "30d" }
   );
 
-  // Better QR sizing logic
   let qrSizePx = Math.round(ev.qrSize * tplW);
-
-  qrSizePx = Math.max(qrSizePx, 180);  // minimum
-  qrSizePx = Math.min(qrSizePx, tplW * 0.25); // maximum 25% width
+  qrSizePx = Math.max(qrSizePx, 180);
+  qrSizePx = Math.min(qrSizePx, tplW * 0.25);
 
   const padding = Math.round(tplW * 0.04);
-
-  const qrLeft = tplW - qrSizePx - padding;
-  const qrTop = tplH - qrSizePx - padding;
 
   const qrBuffer = await QRCode.toBuffer(
     `${BASE_URL}/verify/${qrToken}`,
@@ -369,14 +357,9 @@ app.get("/form/:id", async (req, res) => {
       width: qrSizePx,
       errorCorrectionLevel: "H",
       margin: 6,
-      color: {
-        dark: "#000000",
-        light: "#FFFFFF"
-      }
+      color: { dark: "#000000", light: "#FFFFFF" }
     }
   );
-
-  // ================= CERT SAVE =================
 
   const certFile = `${Date.now()}-${uuidv4()}.png`;
   const certFull = path.join(CERT_DIR, certFile);
@@ -390,8 +373,8 @@ app.get("/form/:id", async (req, res) => {
       },
       {
         input: qrBuffer,
-        left: Math.round(qrLeft),
-        top: Math.round(qrTop)
+        left: tplW - qrSizePx - padding,
+        top: tplH - qrSizePx - padding
       }
     ])
     .png({ quality: 100 })
@@ -413,6 +396,60 @@ app.get("/form/:id", async (req, res) => {
     certRel,
     "generated"
   );
+
+  // ===== SEND EMAIL =====
+  try {
+    const certBuffer = fs.readFileSync(certFull);
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: process.env.FROM_EMAIL,
+        to: email,
+        subject: `🎓 Certificate - ${ev.name}`,
+        html: `
+          <p>Dear <b>${safeName}</b>,</p>
+          <p>You successfully participated in <b>${ev.name}</b>.</p>
+          <p>Your certificate is attached.</p>
+          <br/>
+          <p>Regards,<br/><b>${ev.orgBy}</b></p>
+        `,
+        attachments: [{
+          filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
+          content: certBuffer.toString("base64"),
+          encoding: "base64"
+        }]
+      })
+    });
+
+    if (response.ok) {
+      await db.run(
+        `UPDATE responses SET email_status=? WHERE cert_path=?`,
+        "sent",
+        certRel
+      );
+    } else {
+      const errText = await response.text();
+      await db.run(
+        `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+        "failed",
+        errText.slice(0, 255),
+        certRel
+      );
+    }
+
+  } catch (err) {
+    await db.run(
+      `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+      "failed",
+      err.message,
+      certRel
+    );
+  }
 
   return certRel;
 }
