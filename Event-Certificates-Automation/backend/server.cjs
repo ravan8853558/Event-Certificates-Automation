@@ -129,6 +129,194 @@ app.post("/api/admin/login", loginLimiter, async (req, res) => {
   res.json({ token: generateToken() });
 });
 
+
+// ================= ROOT =================
+app.get("/", (_, res) => res.json({ status: "OK" }));
+
+// ================= LOGIN =================
+app.post("/api/admin/login", loginLimiter, async (req, res) => {
+  const { username, password } = req.body;
+
+  if (username !== ADMIN_USER)
+    return res.status(401).json({ error: "Invalid credentials" });
+
+  const match = await bcrypt.compare(password, ADMIN_PASS_HASH);
+  if (!match)
+    return res.status(401).json({ error: "Invalid credentials" });
+
+  res.json({ token: generateToken() });
+});
+
+// ================= TEMPLATE UPLOAD =================
+const upload = multer({ dest: TEMP_DIR });
+
+app.post("/api/upload-template", authMiddleware, upload.single("template"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
+
+  if (!req.file.mimetype.startsWith("image/"))
+    return res.status(400).json({ error: "Invalid file type" });
+
+  const dest = path.join(TEMPLATE_DIR, req.file.filename + ".png");
+  fs.renameSync(req.file.path, dest);
+
+  const meta = await sharp(dest).metadata();
+
+  res.json({
+    success: true,
+    path: `/uploads/templates/${path.basename(dest)}`,
+    width: meta.width,
+    height: meta.height
+  });
+});
+
+// ================= CREATE EVENT =================
+app.post("/api/events", authMiddleware, async (req, res) => {
+  const p = req.body;
+
+  const stmt = await db.run(`
+    INSERT INTO events
+    (name,date,venue,orgBy,templatePath,nameBoxX,nameBoxY,nameBoxW,nameBoxH,
+     nameFontFamily,nameFontSize,nameFontColor,qrSize)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `,
+    p.name, p.date, p.venue, p.orgBy, p.templatePath,
+    p.nameX, p.nameY, p.nameW, p.nameH,
+    p.nameFontFamily, p.nameFontSize, p.nameFontColor,
+    p.qrSize
+  );
+
+  res.json({
+    success: true,
+    eventId: stmt.lastID,
+    formLink: `${BASE_URL}/form/${stmt.lastID}`
+  });
+});
+
+// ================= GET EVENTS =================
+app.get("/api/events", authMiddleware, async (_, res) => {
+  const rows = await db.all("SELECT * FROM events ORDER BY id DESC");
+  res.json({ success: true, data: rows });
+});
+
+// ================= PUBLIC FORM =================
+app.get("/form/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const ev = await db.get("SELECT * FROM events WHERE id=?", id);
+  if (!ev) return res.status(404).send("Event not found");
+
+  res.send(`
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>${ev.name} - Registration</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+      * { box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+      body {
+        margin:0;
+        min-height:100vh;
+        background: linear-gradient(135deg,#0f172a,#1e293b);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:20px;
+      }
+
+      .card {
+        background: rgba(255,255,255,0.08);
+        backdrop-filter: blur(18px);
+        border-radius:20px;
+        padding:40px;
+        width:100%;
+        max-width:550px;
+        box-shadow:0 20px 40px rgba(0,0,0,0.35);
+        color:white;
+      }
+
+      h2 {
+        margin-bottom:5px;
+      }
+
+      .subtitle {
+        font-size:14px;
+        opacity:0.8;
+        margin-bottom:25px;
+      }
+
+      input {
+        width:100%;
+        padding:14px;
+        margin-bottom:15px;
+        border-radius:10px;
+        border:none;
+        font-size:14px;
+        outline:none;
+      }
+
+      input:focus {
+        box-shadow:0 0 0 2px #38bdf8;
+      }
+
+      button {
+        width:100%;
+        padding:14px;
+        border-radius:10px;
+        border:none;
+        background: linear-gradient(135deg,#38bdf8,#0ea5e9);
+        color:white;
+        font-weight:600;
+        cursor:pointer;
+        transition:0.3s;
+      }
+
+      button:hover {
+        transform:translateY(-2px);
+        box-shadow:0 10px 20px rgba(56,189,248,0.4);
+      }
+
+      .footer {
+        text-align:center;
+        margin-top:15px;
+        font-size:12px;
+        opacity:0.7;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="card">
+      <h2>${ev.name}</h2>
+      <div class="subtitle">
+        Organized by ${ev.orgBy} • ${ev.date}
+      </div>
+
+      <form method="POST" action="/api/submit/${ev.id}">
+        <input name="name" placeholder="Full Name" required/>
+        <input name="email" type="email" placeholder="Email Address" required/>
+        <input name="mobile" placeholder="Mobile Number" required/>
+        <input name="dept" placeholder="Department"/>
+        <input name="year" placeholder="Year"/>
+        <input name="enroll" placeholder="Enrollment No"/>
+        <button type="submit">Generate Certificate</button>
+      </form>
+
+      <div class="footer">
+        UEM Certificate Automation System
+      </div>
+    </div>
+  </body>
+  </html>
+  `);
+});
+
+
+
+
 /* ================= CERTIFICATE GENERATION ================= */
 
 async function generateCertificate(ev, data) {
