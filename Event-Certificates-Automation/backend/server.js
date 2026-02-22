@@ -300,7 +300,7 @@ app.get("/form/:id", async (req, res) => {
 
 // ================= CERTIFICATE GENERATION =================
 async function generateCertificate(ev, data) {
-  const { name, email } = data;
+  const { name, email, mobile, dept, year, enroll } = data;
 
   const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
   const meta = await sharp(tplFull).metadata();
@@ -312,10 +312,11 @@ async function generateCertificate(ev, data) {
   const boxW = ev.nameBoxW * tplW;
   const boxH = ev.nameBoxH * tplH;
 
-  // Adaptive Font
+  // ===== Adaptive Font Scaling =====
   let fontSize = ev.nameFontSize;
   if (name.length > 18) fontSize *= 0.85;
   if (name.length > 28) fontSize *= 0.75;
+  fontSize = Math.round(fontSize);
 
   const svg = `
   <svg width="${boxW}" height="${boxH}">
@@ -330,35 +331,59 @@ async function generateCertificate(ev, data) {
     </text>
   </svg>`;
 
-  const qrToken = jwt.sign({ event: ev.id, name }, JWT_SECRET, { expiresIn: "30d" });
-
-  const qrBuffer = await QRCode.toBuffer(`${BASE_URL}/verify/${qrToken}`, {
-    width: qrSizePx,
-    margin: 2
-  });
-
-  const certFile = `${Date.now()}-${uuidv4()}.png`;
-  const certFull = path.join(CERT_DIR, certFile);
-
-  await sharp(tplFull)
-    .composite([
-      { input: Buffer.from(svg), left: Math.round(centerX - boxW / 2), top: Math.round(centerY - boxH / 2) },
+  // ===== QR SIZE & POSITION (SAFE INSIDE IMAGE) =====
   const qrSizePx = Math.round(ev.qrSize * tplW);
-  const padding = Math.round(tplW * 0.03); // 3% safe margin
+  const padding = Math.round(tplW * 0.03); // 3% margin inside image
 
   const qrLeft = tplW - qrSizePx - padding;
   const qrTop = tplH - qrSizePx - padding;
 
-      { input: qrBuffer, left: qrLeft, top: qrTop }    ])
+  const qrToken = jwt.sign({ event: ev.id, name }, JWT_SECRET, { expiresIn: "30d" });
+
+  const qrBuffer = await QRCode.toBuffer(
+    `${BASE_URL}/verify/${qrToken}`,
+    {
+      width: qrSizePx,
+      margin: 2
+    }
+  );
+
+  const certFile = `${Date.now()}-${uuidv4()}.png`;
+  const certFull = path.join(CERT_DIR, certFile);
+
+  // ===== FINAL COMPOSITE =====
+  await sharp(tplFull)
+    .composite([
+      {
+        input: Buffer.from(svg),
+        left: Math.round(centerX - boxW / 2),
+        top: Math.round(centerY - boxH / 2)
+      },
+      {
+        input: qrBuffer,
+        left: qrLeft,
+        top: qrTop
+      }
+    ])
     .png()
     .toFile(certFull);
 
   const certRel = `/uploads/certs/${certFile}`;
 
-  await db.run(`
-    INSERT INTO responses (event_id,name,email,cert_path,email_status)
-    VALUES (?,?,?,?,?)
-  `, ev.id, name, email, certRel, "generated");
+  await db.run(
+    `INSERT INTO responses 
+     (event_id,name,email,mobile,dept,year,enroll,cert_path,email_status)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    ev.id,
+    name,
+    email,
+    mobile || "",
+    dept || "",
+    year || "",
+    enroll || "",
+    certRel,
+    "generated"
+  );
 
   return certRel;
 }
@@ -447,4 +472,5 @@ app.get("/verify/:token", async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () => console.log("Server Running"));
+
 
