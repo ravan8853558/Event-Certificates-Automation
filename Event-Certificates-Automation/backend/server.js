@@ -17,7 +17,6 @@ const rateLimit = require("express-rate-limit");
 const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 // ================= ENV =================
 const PORT = process.env.PORT || 10000;
@@ -644,6 +643,7 @@ try {
 
 // ================= START =================
 app.listen(PORT, () => console.log("Server Running"));
+
 
 
 
