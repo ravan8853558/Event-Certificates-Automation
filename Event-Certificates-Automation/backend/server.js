@@ -168,6 +168,141 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
   res.send(`<h2>Certificate Generated</h2><a href="${certPath}">Download</a>`);
 });
 
+
+// ===== PUBLIC FORM =====
+app.get("/form/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  const ev = await db.get("SELECT * FROM events WHERE id=?", id);
+  if (!ev) return res.status(404).send("Event not found");
+
+  res.send(`
+  <!doctype html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${ev.name} - Certificate</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: 'Poppins', sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .card {
+        background: rgba(255,255,255,0.08);
+        backdrop-filter: blur(18px);
+        border-radius: 20px;
+        padding: 40px;
+        width: 100%;
+        max-width: 520px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+        color: white;
+      }
+
+      .title {
+        font-size: 26px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+
+      .subtitle {
+        font-size: 14px;
+        opacity: 0.8;
+        margin-bottom: 30px;
+      }
+
+      .form-group {
+        margin-bottom: 18px;
+      }
+
+      input {
+        width: 100%;
+        padding: 14px 16px;
+        border-radius: 10px;
+        border: none;
+        outline: none;
+        font-size: 15px;
+      }
+
+      input:focus {
+        box-shadow: 0 0 0 2px #38bdf8;
+      }
+
+      button {
+        width: 100%;
+        padding: 14px;
+        border-radius: 10px;
+        border: none;
+        background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.25s ease;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(56,189,248,0.4);
+      }
+
+      .footer {
+        text-align: center;
+        margin-top: 18px;
+        font-size: 12px;
+        opacity: 0.7;
+      }
+
+      @media(max-width: 480px) {
+        .card {
+          padding: 28px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+
+    <div class="card">
+      <div class="title">${ev.name}</div>
+      <div class="subtitle">
+        Organized by ${ev.orgBy} • ${ev.date}
+      </div>
+
+      <form method="POST" action="/api/submit/${ev.id}">
+        <div class="form-group">
+          <input name="name" placeholder="Full Name" required>
+        </div>
+
+        <div class="form-group">
+          <input name="email" type="email" placeholder="Email Address" required>
+        </div>
+
+        <button type="submit">Generate Certificate</button>
+      </form>
+
+      <div class="footer">
+        UEM Certificate Automation System
+      </div>
+    </div>
+
+  </body>
+  </html>
+  `);
+});
 // ===== GENERATE CERTIFICATE =====
 async function generateCertificate(ev, name, email) {
   const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
@@ -245,4 +380,5 @@ async function generateCertificate(ev, name, email) {
 
 // ===== START =====
 app.listen(PORT, () => console.log("Server running"));
+
 
