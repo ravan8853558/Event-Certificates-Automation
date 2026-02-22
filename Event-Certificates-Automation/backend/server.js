@@ -494,14 +494,157 @@ a:hover {
 app.get("/verify/:token", async (req, res) => {
   try {
     const data = jwt.verify(req.params.token, JWT_SECRET);
-    res.send(`<h2>Verified Certificate</h2><p>${data.name}</p>`);
-  } catch {
-    res.status(400).send("Invalid or expired verification link");
+
+    const ev = await db.get(
+      "SELECT * FROM events WHERE id=?",
+      data.event
+    );
+
+    const rec = await db.get(
+      "SELECT * FROM responses WHERE event_id=? AND name=?",
+      data.event,
+      data.name
+    );
+
+    if (!ev || !rec) {
+      return res.status(404).send(`
+        <h2 style="color:red;text-align:center;margin-top:40px;">
+          ❌ Verification Failed
+        </h2>
+      `);
+    }
+
+    res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Certificate Verification</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+<style>
+* { box-sizing:border-box; font-family:'Poppins',sans-serif; }
+
+body {
+  margin:0;
+  min-height:100vh;
+  background:linear-gradient(135deg,#0f172a,#1e293b);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.card {
+  background:rgba(255,255,255,0.08);
+  backdrop-filter:blur(18px);
+  padding:50px;
+  border-radius:20px;
+  text-align:center;
+  color:white;
+  max-width:600px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.4);
+}
+
+h2 {
+  margin-bottom:15px;
+  color:#22c55e;
+}
+
+p {
+  margin:10px 0;
+  line-height:1.6;
+}
+
+a {
+  display:inline-block;
+  padding:12px 22px;
+  background:linear-gradient(135deg,#38bdf8,#0ea5e9);
+  border-radius:10px;
+  color:white;
+  text-decoration:none;
+  font-weight:600;
+  margin-top:15px;
+}
+
+a:hover {
+  transform:translateY(-2px);
+}
+</style>
+</head>
+
+<body>
+  <div class="card">
+    <h2>✅ Verification Successful</h2>
+
+    <p>
+      <b>${rec.name}</b> successfully participated in
+      <b>${ev.name}</b>
+    </p>
+
+    <p>
+      Organized by <b>${ev.orgBy}</b> on <b>${ev.date}</b>
+    </p>
+
+    <a href="${rec.cert_path}" target="_blank">
+      Download Certificate
+    </a>
+  </div>
+</body>
+</html>
+`);
+  } catch (err) {
+    res.status(400).send(`
+      <h2 style="color:red;text-align:center;margin-top:40px;">
+        ❌ Invalid or Expired Verification Link
+      </h2>
+    `);
   }
 });
 
+
+/* ===== SEND EMAIL ===== */
+try {
+  const certBuffer = fs.readFileSync(certFull);
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: process.env.FROM_EMAIL,
+      to: email,
+      subject: `🎓 Certificate - ${ev.name}`,
+      html: `
+        <p>Dear <b>${name}</b>,</p>
+        <p>You successfully participated in <b>${ev.name}</b>.</p>
+        <p>Your certificate is attached below.</p>
+        <br/>
+        <p>Regards,<br/><b>${ev.orgBy}</b></p>
+      `,
+      attachments: [{
+        filename: `${name.replace(/[^\w]/g,"_")}.png`,
+        content: certBuffer.toString("base64"),
+        encoding: "base64"
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.log("Resend error:", errText);
+  }
+
+} catch (err) {
+  console.log("Email failed:", err.message);
+}
+
 // ================= START =================
 app.listen(PORT, () => console.log("Server Running"));
+
 
 
 
