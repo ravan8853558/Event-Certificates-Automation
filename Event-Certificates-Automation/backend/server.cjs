@@ -606,6 +606,9 @@ a:hover {
 try {
   const certBuffer = fs.readFileSync(certFull);
 
+  const fetch = (...args) =>
+    import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -631,29 +634,19 @@ try {
     })
   });
 
-  if (response.ok) {
-    await db.run(
-      "UPDATE responses SET email_status=? WHERE cert_path=?",
-      "sent",
-      certRel
-    );
-  } else {
+  if (!response.ok) {
     const errText = await response.text();
+    console.log("Resend error:", errText);
+  } else {
     await db.run(
-      "UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?",
-      "failed",
-      errText,
+      `UPDATE responses SET email_status=? WHERE cert_path=?`,
+      "sent",
       certRel
     );
   }
 
 } catch (err) {
-  await db.run(
-    "UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?",
-    "failed",
-    err.message,
-    certRel
-  );
+  console.log("Email failed:", err.message);
 }
 
 // ================= START =================
