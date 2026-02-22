@@ -15,7 +15,6 @@ const rateLimit = require("express-rate-limit");
 const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
-
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -26,6 +25,11 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_USER = process.env.ADMIN_USER;
 const ADMIN_PASS_HASH = process.env.ADMIN_PASS;
 const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
+
+if (!JWT_SECRET || !ADMIN_USER || !ADMIN_PASS_HASH) {
+  console.error("Missing required environment variables");
+  process.exit(1);
+}
 
 /* ================= PATHS ================= */
 
@@ -44,8 +48,14 @@ if (!fs.existsSync(BULK_DIR)) {
   fs.mkdirSync(BULK_DIR, { recursive: true });
 }
 
-/* ================= EXPRESS ================= */
+const BULK_OUTPUT_DIR = path.join(__dirname, "bulk_outputs");
 
+if (!fs.existsSync(BULK_OUTPUT_DIR)) {
+  fs.mkdirSync(BULK_OUTPUT_DIR, { recursive: true });
+}
+
+
+/* ================= EXPRESS ================= */
 const app = express();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "25mb" }));
@@ -113,18 +123,37 @@ function generateToken() {
 
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   try {
     jwt.verify(token, JWT_SECRET);
     next();
-  } catch {
-    res.status(401).json({ error: "Invalid token" });
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
   }
 }
 
 // ================= ROOT =================
 app.get("/", (_, res) => res.json({ status: "OK" }));
+
+// ================= BULK DOWNLOAD =================
+app.get("/api/bulk/download/:file", authMiddleware, (req, res) => {
+  const file = req.params.file;
+  const safePath = path.resolve(BULK_OUTPUT_DIR, file);
+
+  if (!safePath.startsWith(path.resolve(BULK_OUTPUT_DIR))) {
+    return res.status(400).json({ error: "Invalid file path" });
+  }
+
+  if (!fs.existsSync(safePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+
+  res.download(safePath);
+});
 
 // ================= LOGIN =================
 app.post("/api/admin/login", loginLimiter, async (req, res) => {
@@ -193,7 +222,10 @@ app.get("/api/events", authMiddleware, async (_, res) => {
 
 /* ================= BULK FILE UPLOAD ================= */
 
-const bulkUpload = multer({ dest: BULK_DIR });
+const bulkUpload = multer({
+  dest: BULK_DIR,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
 
 app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (req, res) => {
   try {
@@ -205,14 +237,24 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
 
     let rows = [];
 
+    // ================= PARSE CSV =================
     if (ext === ".csv") {
       const content = fs.readFileSync(filePath);
-      rows = parse(content, { columns: true, skip_empty_lines: true });
-    } 
+      rows = parse(content, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true
+      });
+    }
+
+    // ================= PARSE XLSX =================
     else if (ext === ".xlsx") {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(filePath);
+
       const sheet = workbook.worksheets[0];
+      if (!sheet)
+        return res.status(400).json({ error: "Excel sheet empty" });
 
       const headers = sheet.getRow(1).values.slice(1);
 
@@ -221,17 +263,25 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
 
         let obj = {};
         headers.forEach((h, i) => {
-          obj[h] = row.getCell(i + 1).value;
+          obj[h] = row.getCell(i + 1).value || "";
         });
 
         rows.push(obj);
       });
-    } 
+    }
+
     else {
       return res.status(400).json({ error: "Only CSV or XLSX allowed" });
     }
 
-    const columns = Object.keys(rows[0] || {});
+    // 🔒 Now validate rows AFTER parsing
+    if (!rows.length)
+      return res.status(400).json({ error: "No data found in file" });
+
+    if (rows.length > 2000)
+      return res.status(400).json({ error: "Maximum 2000 rows allowed per bulk" });
+
+    const columns = Object.keys(rows[0]);
 
     res.json({
       success: true,
@@ -241,6 +291,7 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
     });
 
   } catch (err) {
+    console.error("Bulk upload error:", err);
     res.status(500).json({ error: "Bulk upload failed" });
   }
 });
@@ -249,7 +300,8 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
 app.get("/form/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const ev = await db.get("SELECT * FROM events WHERE id=?", id);
-  if (!ev) return res.status(404).send("Event not found");
+  if (!ev) 
+    return res.status(404).send("Event not found");
 
   res.send(`
   <!DOCTYPE html>
@@ -363,7 +415,8 @@ app.get("/form/:id", async (req, res) => {
 
 /* ================= CERTIFICATE GENERATION ================= */
 
-async function generateCertificate(ev, data) {
+async function generateCertificate(ev, data, sendEmail = true) {
+
   const { name, email } = data;
 
   const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
@@ -438,64 +491,54 @@ async function generateCertificate(ev, data) {
      VALUES (?,?,?,?,?)`,
     ev.id,
     safeName,
-    email,
+    email || "",
     certRel,
     "generated"
   );
 
-  /* ===== SEND EMAIL ===== */
+  // ✅ Email only if allowed
+  if (sendEmail && email) {
+    try {
+      const certBuffer = fs.readFileSync(certFull);
 
-  try {
-    const certBuffer = fs.readFileSync(certFull);
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: process.env.FROM_EMAIL,
+          to: email,
+          subject: `🎓 Certificate - ${ev.name}`,
+          html: `<p>Dear <b>${safeName}</b>,</p>
+                 <p>You successfully participated in <b>${ev.name}</b>.</p>`,
+          attachments: [{
+            filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
+            content: certBuffer.toString("base64")
+          }]
+        })
+      });
 
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: process.env.FROM_EMAIL,
-        to: email,
-        subject: `🎓 Certificate - ${ev.name}`,
-        html: `
-          <p>Dear <b>${safeName}</b>,</p>
-          <p>You successfully participated in <b>${ev.name}</b>.</p>
-          <p>Your certificate is attached.</p>
-        `,
-        attachments: [{
-          filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
-          content: certBuffer.toString("base64")
-        }]
-      })
-    });
-
-    if (response.ok) {
+      if (response.ok) {
+        await db.run(
+          `UPDATE responses SET email_status=? WHERE cert_path=?`,
+          "sent",
+          certRel
+        );
+      }
+    } catch (err) {
       await db.run(
-        `UPDATE responses SET email_status=? WHERE cert_path=?`,
-        "sent",
-        certRel
-      );
-    } else {
-      await db.run(
-        `UPDATE responses SET email_status=? WHERE cert_path=?`,
+        `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
         "failed",
+        err.message,
         certRel
       );
     }
-
-  } catch (err) {
-    await db.run(
-      `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
-      "failed",
-      err.message,
-      certRel
-    );
   }
 
   return certRel;
 }
-
 // ================= SUBMIT =================
 
 app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
@@ -504,7 +547,8 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
     req.params.eventId
   );
 
-  if (!ev) return res.status(404).send("Event not found");
+  if (!ev) 
+    return res.status(404).send("Event not found");
 
   const cert = await generateCertificate(ev, req.body);
 
@@ -524,21 +568,21 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 `);
 });
 
-const csvParse = require("csv-parse/sync");
-
 /* ================= BULK GENERATE ================= */
-
-app.post("/api/bulk/generate", authMiddleware, async (req, res) => {
+const bulkLimiter = rateLimit({ windowMs: 60 * 1000, max: 2 });
+app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => {
   try {
     const { eventId, nameColumn, tempFile } = req.body;
 
     if (!eventId || !nameColumn || !tempFile)
       return res.status(400).json({ error: "Missing required fields" });
-
+    
     // 🔒 Security: prevent path traversal
-    const safeTempPath = path.normalize(tempFile);
-    if (!safeTempPath.startsWith(TEMP_DIR))
+    const safeTempPath = path.resolve(tempFile);
+
+    if (!safeTempPath.startsWith(path.resolve(BULK_DIR))) {
       return res.status(400).json({ error: "Invalid file path" });
+    }
 
     if (!fs.existsSync(safeTempPath))
       return res.status(400).json({ error: "Uploaded file not found" });
@@ -559,7 +603,7 @@ app.post("/api/bulk/generate", authMiddleware, async (req, res) => {
 
       const content = fs.readFileSync(safeTempPath);
 
-      rows = csvParse.parse(content, {
+      rows = parse(content, {
         columns: true,
         skip_empty_lines: true,
         trim: true
@@ -594,19 +638,28 @@ app.post("/api/bulk/generate", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Unsupported file type" });
     }
 
-    if (!rows.length)
-      return res.status(400).json({ error: "No data found in file" });
+   if (!rows.length)
+     return res.status(400).json({ error: "No data found in file" });
 
-    if (!rows[0][nameColumn])
-      return res.status(400).json({ error: "Invalid name column selected" });
+   if (rows.length > 2000)
+     return res.status(400).json({ error: "Maximum 2000 rows allowed per bulk" });
+
+   if (!rows[0][nameColumn])
+     return res.status(400).json({ error: "Invalid name column selected" });
 
     /* ================= CREATE ZIP ================= */
 
-    res.attachment("bulk_certificates.zip");
+    const zipName = `bulk-${Date.now()}.zip`;
+    const zipPath = path.join(BULK_OUTPUT_DIR, zipName);
 
+    const output = fs.createWriteStream(zipPath);
     const archive = archiver("zip", { zlib: { level: 9 } });
-    archive.pipe(res);
 
+    await new Promise((resolve, reject) => {
+      output.on("close", resolve);
+      archive.on("error", reject);
+      archive.finalize();
+    });
     /* ================= CREATE EXCEL WITH LINKS ================= */
 
     const outputWorkbook = new ExcelJS.Workbook();
@@ -625,11 +678,8 @@ app.post("/api/bulk/generate", authMiddleware, async (req, res) => {
 
       const name = String(row[nameColumn] || "").trim();
       if (!name) continue;
-
-      const certRel = await generateCertificate(ev, {
-        name,
-        email: ""  // optional
-      });
+      
+      const certRel = await generateCertificate(ev, { name, email: "" }, false);
 
       const certFullPath = path.join(__dirname, certRel.replace(/^\//, ""));
 
@@ -660,6 +710,15 @@ app.post("/api/bulk/generate", authMiddleware, async (req, res) => {
 
     await archive.finalize();
 
+    output.on("close", () => {
+      if (fs.existsSync(tempExcelPath)) {
+        fs.unlinkSync(tempExcelPath);
+      }
+      res.json({
+        success: true,
+        zipUrl: `${BASE_URL}/bulk_outputs/${zipName}`
+      });
+    });
   } catch (err) {
     console.error("Bulk error:", err);
     res.status(500).json({ error: "Bulk generation failed" });
@@ -865,23 +924,54 @@ app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
 
 
 /* ========= DELETE SINGLE EVENT ========= */
+
 app.delete("/api/events/:id", authMiddleware, async (req, res) => {
   try {
-    await db.run("DELETE FROM events WHERE id=?", req.params.id);
+    const eventId = req.params.id;
+
+    const certs = await db.all(
+      "SELECT cert_path FROM responses WHERE event_id=?",
+      eventId
+    );
+
+    for (const c of certs) {
+      const fullPath = path.join(__dirname, c.cert_path.replace(/^\//, ""));
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
+    }
+
+    await db.run("DELETE FROM events WHERE id=?", eventId);
+
     res.json({ success: true });
+
   } catch (err) {
     res.status(500).json({ error: "Delete failed" });
   }
 });
 
-
 /* ========= DELETE MULTIPLE EVENTS ========= */
+
 app.post("/api/delete-multiple-events", authMiddleware, async (req, res) => {
   try {
     const { ids } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0)
       return res.status(400).json({ error: "No IDs provided" });
+
+    for (const eventId of ids) {
+      const certs = await db.all(
+        "SELECT cert_path FROM responses WHERE event_id=?",
+        eventId
+      );
+
+      for (const c of certs) {
+        const fullPath = path.join(__dirname, c.cert_path.replace(/^\//, ""));
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    }
 
     const placeholders = ids.map(() => "?").join(",");
 
@@ -893,6 +983,7 @@ app.post("/api/delete-multiple-events", authMiddleware, async (req, res) => {
     res.json({ success: true });
 
   } catch (err) {
+    console.error("Bulk delete error:", err);
     res.status(500).json({ error: "Bulk delete failed" });
   }
 });
@@ -906,7 +997,10 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
 
     const ids = req.query.ids.split(",");
     const archive = archiver("zip", { zlib: { level: 9 } });
-
+    archive.on("error", (err) => {
+      console.error("Archive error:", err);
+      res.status(500).json({ error: "Zip creation failed" });
+    });
     res.attachment("multiple_events_data.zip");
     archive.pipe(res);
 
@@ -940,6 +1034,24 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
   }
 });
 
+/* ========= BULK HISTORY ========= */
+app.get("/api/bulk/history", authMiddleware, async (req, res) => {
+  try {
+    const files = fs.readdirSync(BULK_OUTPUT_DIR)
+      .filter(f => f.endsWith(".zip"))
+      .map(f => ({
+        name: f,
+        url: `${BASE_URL}/api/bulk/download/${f}`  // ✅ FIXED
+      }))
+      .sort((a, b) => b.name.localeCompare(a.name));
+
+    res.json({ success: true, files });
+
+  } catch (err) {
+    console.error("Bulk history error:", err);
+    res.status(500).json({ error: "Failed to load history" });
+  }
+});
 /* ================= START ================= */
 
 app.listen(PORT, () => console.log("Server Running on", PORT));
