@@ -12,6 +12,7 @@ const sharp = require("sharp");
 const QRCode = require("qrcode");
 const bcrypt = require("bcryptjs");
 const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
 const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
@@ -60,10 +61,35 @@ if (!fs.existsSync(BULK_OUTPUT_DIR)) {
 
 /* ================= EXPRESS ================= */
 const app = express();
-app.use(cors({
-  origin: process.env.FRONTEND_URL
-}));
-app.use(express.json({ limit: "25mb" }));
+app.use(
+  helmet({
+    contentSecurityPolicy: false
+  })
+);
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:3000",
+  "http://localhost:5173"
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true); // allow Postman / server-to-server
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: false
+  })
+);
+
+app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
@@ -81,12 +107,32 @@ async function initDB() {
   });
 
   await db.exec(`PRAGMA foreign_keys = ON;`);
-  
-  console.log("Database Ready");
+
+  // 🔥 ADD INDEXES
+  await db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_responses_event 
+    ON responses(event_id);
+
+    CREATE INDEX IF NOT EXISTS idx_responses_created 
+    ON responses(created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_bulk_jobs_status 
+    ON bulk_jobs(status);
+
+    CREATE INDEX IF NOT EXISTS idx_events_created 
+    ON events(created_at);
+    
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_event_name
+    ON responses(event_id, name);
+  `);
+
+  console.log("Database Ready with indexes");
 }
 
+let server;
+
 initDB().then(() => {
-  app.listen(PORT, () => 
+  server = app.listen(PORT, () => 
     console.log("Server Running on", PORT)
   );
 }).catch(err => {
@@ -173,9 +219,6 @@ const upload = multer({
 app.post("/api/upload-template", authMiddleware, upload.single("template"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
 
-  if (!req.file.mimetype.startsWith("image/"))
-    return res.status(400).json({ error: "Invalid file type" });
-
   const dest = path.join(TEMPLATE_DIR, req.file.filename + ".png");
 
   let metadata;
@@ -257,6 +300,15 @@ app.post("/api/events", authMiddleware, async (req, res) => {
   const error = validateEventInput(p);
   if (error) {
     return res.status(400).json({ error });
+  }
+  const templateFull = path.resolve(__dirname, p.templatePath.replace(/^\//, ""));
+
+  if (!templateFull.startsWith(path.resolve(UPLOAD_DIR))) {
+    return res.status(400).json({ error: "Invalid template path" });
+  }
+
+  if (!fs.existsSync(templateFull)) {
+    return res.status(400).json({ error: "Template file not found" });
   }
   const stmt = await db.run(`
     INSERT INTO events
@@ -369,124 +421,124 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
 });
 
 // ================= PUBLIC FORM =================
+
 app.get("/form/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const ev = await db.get("SELECT * FROM events WHERE id=?", id);
-  if (!ev) 
+
+  if (!ev) {
     return res.status(404).send("Event not found");
+  }
 
   res.send(`
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>${escapeHTML(ev.name)} - Registration</title>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>${escapeHTML(ev.name)} - Registration</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+    body {
+      margin:0;
+      min-height:100vh;
+      background: linear-gradient(135deg,#0f172a,#1e293b);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(18px);
+      border-radius:20px;
+      padding:40px;
+      width:100%;
+      max-width:550px;
+      box-shadow:0 20px 40px rgba(0,0,0,0.35);
+      color:white;
+    }
+
+    h2 {
+      margin-bottom:5px;
+    }
+
+    .subtitle {
+      font-size:14px;
+      opacity:0.8;
+      margin-bottom:25px;
+    }
+
+    input {
+      width:100%;
+      padding:14px;
+      margin-bottom:15px;
+      border-radius:10px;
+      border:none;
+      font-size:14px;
+      outline:none;
+    }
+
+    input:focus {
+      box-shadow:0 0 0 2px #38bdf8;
+    }
+
+    button {
+      width:100%;
+      padding:14px;
+      border-radius:10px;
+      border:none;
+      background: linear-gradient(135deg,#38bdf8,#0ea5e9);
+      color:white;
+      font-weight:600;
+      cursor:pointer;
+      transition:0.3s;
+    }
+
+    button:hover {
+      transform:translateY(-2px);
+      box-shadow:0 10px 20px rgba(56,189,248,0.4);
+    }
+
+    .footer {
+      text-align:center;
+      margin-top:15px;
+      font-size:12px;
+      opacity:0.7;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
     <h2>${escapeHTML(ev.name)}</h2>
-    Organized by ${escapeHTML(ev.orgBy)}
-    
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <style>
-      * { box-sizing: border-box; font-family: 'Poppins', sans-serif; }
-
-      body {
-        margin:0;
-        min-height:100vh;
-        background: linear-gradient(135deg,#0f172a,#1e293b);
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        padding:20px;
-      }
-
-      .card {
-        background: rgba(255,255,255,0.08);
-        backdrop-filter: blur(18px);
-        border-radius:20px;
-        padding:40px;
-        width:100%;
-        max-width:550px;
-        box-shadow:0 20px 40px rgba(0,0,0,0.35);
-        color:white;
-      }
-
-      h2 {
-        margin-bottom:5px;
-      }
-
-      .subtitle {
-        font-size:14px;
-        opacity:0.8;
-        margin-bottom:25px;
-      }
-
-      input {
-        width:100%;
-        padding:14px;
-        margin-bottom:15px;
-        border-radius:10px;
-        border:none;
-        font-size:14px;
-        outline:none;
-      }
-
-      input:focus {
-        box-shadow:0 0 0 2px #38bdf8;
-      }
-
-      button {
-        width:100%;
-        padding:14px;
-        border-radius:10px;
-        border:none;
-        background: linear-gradient(135deg,#38bdf8,#0ea5e9);
-        color:white;
-        font-weight:600;
-        cursor:pointer;
-        transition:0.3s;
-      }
-
-      button:hover {
-        transform:translateY(-2px);
-        box-shadow:0 10px 20px rgba(56,189,248,0.4);
-      }
-
-      .footer {
-        text-align:center;
-        margin-top:15px;
-        font-size:12px;
-        opacity:0.7;
-      }
-    </style>
-  </head>
-
-  <body>
-    <div class="card">
-      <h2>${ev.name}</h2>
-      <div class="subtitle">
-        Organized by ${ev.orgBy} • ${ev.date}
-      </div>
-
-      <form method="POST" action="/api/submit/${ev.id}">
-        <input name="name" placeholder="Full Name" required/>
-        <input name="email" type="email" placeholder="Email Address" required/>
-        <input name="mobile" placeholder="Mobile Number" required/>
-        <input name="dept" placeholder="Department"/>
-        <input name="year" placeholder="Year"/>
-        <input name="enroll" placeholder="Enrollment No"/>
-        <button type="submit">Generate Certificate</button>
-      </form>
-
-      <div class="footer">
-        Certificate Automation System
-      </div>
+    <div class="subtitle">
+      Organized by ${escapeHTML(ev.orgBy)} • ${escapeHTML(ev.date)}
     </div>
-  </body>
-  </html>
+
+    <form method="POST" action="/api/submit/${ev.id}">
+      <input name="name" placeholder="Full Name" required/>
+      <input name="email" type="email" placeholder="Email Address" required/>
+      <input name="mobile" placeholder="Mobile Number" required/>
+      <input name="dept" placeholder="Department"/>
+      <input name="year" placeholder="Year"/>
+      <input name="enroll" placeholder="Enrollment No"/>
+      <button type="submit">Generate Certificate</button>
+    </form>
+
+    <div class="footer">
+      Certificate Automation System
+    </div>
+  </div>
+</body>
+</html>
   `);
 });
-
 
 function escapeHTML(str) {
   return String(str).replace(/[&<>"']/g, (m) => ({
@@ -498,6 +550,15 @@ function escapeHTML(str) {
   })[m]);
 }
 
+function formatNameCase(name) {
+  return String(name)
+    .trim()
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 /* ================= CERTIFICATE GENERATION ================= */
 
 async function generateCertificate(ev, data, sendEmail = true) {
@@ -524,7 +585,9 @@ async function generateCertificate(ev, data, sendEmail = true) {
   const boxW = ev.nameBoxW * tplW;
   const boxH = ev.nameBoxH * tplH;
 
-  const safeName = escapeHTML(String(name).trim());
+  const formattedName = formatNameCase(name);
+  const normalizedName = formattedName.toLowerCase();
+  const safeName = formattedName.replace(/[<>]/g, "");
   let fontSize = ev.nameFontSize || 40;
   
   const approxWidth = safeName.length * (fontSize * 0.6);
@@ -546,7 +609,7 @@ async function generateCertificate(ev, data, sendEmail = true) {
   </svg>`;
 
   const qrToken = jwt.sign(
-    { event: ev.id, name: safeName },
+    { event: ev.id, name: formattedName },
     JWT_SECRET,
     { expiresIn: "30d" }
   );
@@ -582,16 +645,32 @@ async function generateCertificate(ev, data, sendEmail = true) {
     .toFile(certFull);
 
   const certRel = `/uploads/certs/${certFile}`;
+  
+  try {
+    await db.run(
+      `INSERT INTO responses (event_id,name,email,cert_path,email_status)
+       VALUES (?,?,?,?,?)`,
+      ev.id,
+      normalizedName,
+      email || "",
+      certRel,
+      "generated"
+    );
+  } catch (err) {
 
-  await db.run(
-    `INSERT INTO responses (event_id,name,email,cert_path,email_status)
-     VALUES (?,?,?,?,?)`,
-    ev.id,
-    safeName,
-    email || "",
-    certRel,
-    "generated"
-  );
+  // 🔥 Duplicate case
+    if (err.message.includes("UNIQUE")) {
+
+    // File delete karo jo abhi create hui thi
+      if (fs.existsSync(certFull)) {
+        fs.unlinkSync(certFull);
+      }
+
+      throw new Error("Certificate already generated for this name");
+    }
+
+    throw err;
+  }
 
   // ✅ Email only if allowed
  if (sendEmail && email) {
@@ -656,20 +735,33 @@ async function generateCertificate(ev, data, sendEmail = true) {
     );
   }
 }
-// ================= SUBMIT =================
+     return certRel;
+}
 
+// ================= SUBMIT =================
 app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
+
+  const { name, email } = req.body;
+
+  if (!name || name.length > 100)
+     return res.status(400).send("Invalid name");
+
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+     return res.status(400).send("Invalid email");
+
   const ev = await db.get(
     "SELECT * FROM events WHERE id=?",
     req.params.eventId
   );
 
-  if (!ev) 
+  if (!ev)
     return res.status(404).send("Event not found");
 
-  const cert = await generateCertificate(ev, req.body);
+  try {
 
-  res.send(`
+     const cert = await generateCertificate(ev, req.body);
+
+     res.send(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -683,6 +775,16 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 </body>
 </html>
 `);
+
+  } catch (err) {
+
+    if (err.message.includes("already generated")) {
+      return res.status(400).send("Certificate already generated for this name");
+    }
+
+    console.error(err);
+    return res.status(500).send("Certificate generation failed");
+  }
 });
 
 /* ================= BULK GENERATE (ASYNC WITH PROGRESS) ================= */
@@ -757,96 +859,173 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
 
     /* ===== BACKGROUND PROCESS ===== */
 
-    (async () => {
+(async () => {
+  try {
 
-      const zipName = `bulk-${Date.now()}.zip`;
-      const zipPath = path.join(BULK_OUTPUT_DIR, zipName);
+    const zipName = `bulk-${Date.now()}.zip`;
+    const zipPath = path.join(BULK_OUTPUT_DIR, zipName);
 
-      const output = fs.createWriteStream(zipPath);
-      const archive = archiver("zip", { zlib: { level: 9 } });
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
 
-      archive.pipe(output);
+    archive.pipe(output);
 
-      const outputWorkbook = new ExcelJS.Workbook();
-      const outputSheet = outputWorkbook.addWorksheet("Participants");
+    const outputWorkbook = new ExcelJS.Workbook();
+    const outputSheet = outputWorkbook.addWorksheet("Participants");
 
-      const headers = Object.keys(rows[0]);
+    const headers = Object.keys(rows[0]);
 
-      outputSheet.columns = [
-        ...headers.map(h => ({ header: h, key: h, width: 20 })),
-        { header: "Certificate Link", key: "cert_link", width: 45 }
-      ];
+    outputSheet.columns = [
+      ...headers.map(h => ({ header: h, key: h, width: 20 })),
+      { header: "Certificate Link", key: "cert_link", width: 45 }
+    ];
 
-      for (let row of rows) {
+for (let row of rows) {
 
-        const name = String(row[nameColumn] || "").trim();
-        if (!name) continue;
+  const name = String(row[nameColumn] || "").trim();
+  if (!name) continue;
 
-        const certRel = await generateCertificate(ev, { name, email: "" }, false);
-        const certFullPath = path.join(__dirname, certRel.replace(/^\//, ""));
+  let certRel;
+
+  try {
+    certRel = await generateCertificate(
+      ev,
+      { name, email: "" },
+      false
+    );
+  } catch (err) {
+
+    if (err.message.includes("already generated")) {
+
+      const existing = await db.get(
+        "SELECT cert_path FROM responses WHERE event_id=? AND name=?",
+        ev.id,
+        formatNameCase(name).toLowerCase()
+      );
+
+      if (existing) {
+
+        certRel = existing.cert_path;
+
+        const certFullPath = path.join(
+          __dirname,
+          certRel.replace(/^\//, "")
+        );
 
         if (fs.existsSync(certFullPath)) {
-          archive.file(certFullPath, { name: path.basename(certFullPath) });
+          archive.file(certFullPath, {
+            name: path.basename(certFullPath)
+          });
         }
 
         const safeRow = {};
-
         for (let key in row) {
           let val = String(row[key] || "");
           if (val.startsWith("=")) val = "'" + val;
           safeRow[key] = val;
         }
 
-          outputSheet.addRow({
+        outputSheet.addRow({
           ...safeRow,
           cert_link: `${BASE_URL}${certRel}`
         });
 
         await db.run(
-          `UPDATE bulk_jobs 
-           SET completed = completed + 1 
-           WHERE id = ?`,
+          `UPDATE bulk_jobs SET completed = completed + 1 WHERE id = ?`,
           jobId
-        );      
+        );
       }
 
-      const tempExcelPath = path.join(TEMP_DIR, `bulk-${Date.now()}.xlsx`);
-      await outputWorkbook.xlsx.writeFile(tempExcelPath);
+      continue;
+    }
 
-      archive.file(tempExcelPath, { name: "participants_with_links.xlsx" });
+    throw err;
+  }
 
-      await new Promise((resolve, reject) => {
-        archive.on("error", reject);
+  const certFullPath = path.join(
+    __dirname,
+    certRel.replace(/^\//, "")
+  );
 
-        output.on("close", async () => {
-           await db.run(
-              `UPDATE bulk_jobs 
-               SET status = 'completed', zip_name = ?
-               WHERE id = ?`,
-              zipName,
-              jobId
-          );
+  if (fs.existsSync(certFullPath)) {
+    archive.file(certFullPath, {
+      name: path.basename(certFullPath)
+    });
+  }
 
-        if (fs.existsSync(safeTempPath)) {
-          fs.unlinkSync(safeTempPath);
-        }
+  const safeRow = {};
+  for (let key in row) {
+    let val = String(row[key] || "");
+    if (val.startsWith("=")) val = "'" + val;
+    safeRow[key] = val;
+  }
 
-        if (fs.existsSync(tempExcelPath)) {
-          fs.unlinkSync(tempExcelPath);
-        }
+  outputSheet.addRow({
+    ...safeRow,
+    cert_link: `${BASE_URL}${certRel}`
+  });
 
-        resolve();
-      });
+  await db.run(
+    `UPDATE bulk_jobs SET completed = completed + 1 WHERE id = ?`,
+    jobId
+  );
+}
+    
+    // Create Excel file
+    const tempExcelPath = path.join(
+      TEMP_DIR,
+      `bulk-${Date.now()}.xlsx`
+    );
 
-  archive.finalize();
-});
+    await outputWorkbook.xlsx.writeFile(tempExcelPath);
 
-    })();
+    archive.file(tempExcelPath, {
+      name: "participants_with_links.xlsx"
+    });
+
+    // Finalize archive BEFORE waiting for close
+    await archive.finalize();
+
+    // Wait until zip stream fully closed
+    await new Promise((resolve, reject) => {
+      output.on("close", resolve);
+      archive.on("error", reject);
+    });
+
+    // Mark job completed
+    await db.run(
+      `UPDATE bulk_jobs 
+       SET status = 'completed', zip_name = ?
+       WHERE id = ?`,
+      zipName,
+      jobId
+    );
+
+    // Cleanup temp files
+    if (fs.existsSync(safeTempPath)) {
+      fs.unlinkSync(safeTempPath);
+    }
+
+    if (fs.existsSync(tempExcelPath)) {
+      fs.unlinkSync(tempExcelPath);
+    }
 
   } catch (err) {
-    console.error("Bulk error:", err);
-    res.status(500).json({ error: "Bulk generation failed" });
+
+    console.error("Bulk background error:", err);
+
+    await db.run(
+      `UPDATE bulk_jobs 
+       SET status = 'failed'
+       WHERE id = ?`,
+      jobId
+    );
   }
+})();
+} catch (err) {
+  console.error("Bulk error:", err);
+  return res.status(500).json({ error: "Bulk generation failed" });
+}
 });
 
 // ================= VERIFY =================
@@ -855,8 +1034,8 @@ app.get("/verify/:token", async (req, res) => {
     const data = jwt.verify(req.params.token, JWT_SECRET);
 
     const eventId = data.event;
-    const participantName = String(data.name).trim();
-
+    const participantName = String(data.name).trim().toLowerCase();
+    
     const ev = await db.get(
       "SELECT * FROM events WHERE id = ?",
       eventId
@@ -941,7 +1120,7 @@ a:hover {
     <h2>✅ Verification Successful</h2>
 
     <p>
-      <b>${escapeHTML(rec.name)}</b> successfully participated in
+      <b>${escapeHTML(formatNameCase(rec.name))}</b> successfully participated in
       <b>${escapeHTML(ev.name)}</b>
     </p>
 
@@ -1008,7 +1187,7 @@ app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
 
     responses.forEach(r => {
       worksheet.addRow({
-        name: r.name,
+        name: formatNameCase(r.name),
         email: r.email,
         mobile: r.mobile,
         dept: r.dept,
@@ -1142,7 +1321,7 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
       let csv = "Name,Email,Mobile,Dept,Year,Enroll,Certificate\n";
 
       responses.forEach(r => {
-        csv += `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${BASE_URL}${r.cert_path}"\n`;
+        csv += `"${formatNameCase(r.name)}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${BASE_URL}${r.cert_path}"\n`;
       });
 
       const safeName = event.name.replace(/[^\w]/g, "_");
@@ -1198,3 +1377,33 @@ app.get("/api/bulk/history", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Failed to load history" });
   }
 });
+
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal Server Error" });
+});
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+async function shutdown() {
+  console.log("Shutting down gracefully...");
+
+  try {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+      console.log("HTTP server closed");
+    }
+
+    if (db) {
+      await db.close();
+      console.log("Database connection closed");
+    }
+
+    process.exit(0);
+
+  } catch (err) {
+    console.error("Shutdown error:", err);
+    process.exit(1);
+  }
+}
