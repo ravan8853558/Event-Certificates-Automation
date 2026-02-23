@@ -430,7 +430,7 @@ async function generateCertificate(ev, data, sendEmail = true) {
   const svg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="${boxW}" height="${boxH}">
     <text x="${boxW/2}" y="${boxH/2}"
-      font-family="${ev.nameFontFamily}"
+      font-family="${ev.nameFontFamily || 'Poppins'}"
       font-size="${fontSize}"
       fill="${ev.nameFontColor}"
       text-anchor="middle"
@@ -445,7 +445,7 @@ async function generateCertificate(ev, data, sendEmail = true) {
     { expiresIn: "30d" }
   );
 
-  let qrSizePx = Math.round(ev.qrSize * tplW);
+  let qrSizePx = Math.round((ev.qrSize || 0.18) * tplW);
   qrSizePx = Math.max(qrSizePx, 180);
   qrSizePx = Math.min(qrSizePx, tplW * 0.25);
 
