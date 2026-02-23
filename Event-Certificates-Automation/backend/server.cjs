@@ -30,6 +30,9 @@ if (!JWT_SECRET || !ADMIN_USER || !ADMIN_PASS_HASH) {
   console.error("Missing required environment variables");
   process.exit(1);
 }
+if (!process.env.RESEND_API_KEY || !process.env.FROM_EMAIL) {
+  console.warn("⚠ Email service not fully configured");
+}
 
 /* ================= PATHS ================= */
 
@@ -147,7 +150,25 @@ app.post("/api/admin/login", loginLimiter, async (req, res) => {
 });
 
 // ================= TEMPLATE UPLOAD =================
-const upload = multer({ dest: TEMP_DIR });
+const upload = multer({
+  dest: TEMP_DIR,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["image/png", "image/jpeg"];
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    if (
+      !allowedTypes.includes(file.mimetype) ||
+      ![".png", ".jpg", ".jpeg"].includes(ext)
+    ) {
+      return cb(new Error("Only PNG and JPG files are allowed"));
+    }
+
+    cb(null, true);
+  }
+});
 
 app.post("/api/upload-template", authMiddleware, upload.single("template"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
@@ -157,9 +178,23 @@ app.post("/api/upload-template", authMiddleware, upload.single("template"), asyn
 
   const dest = path.join(TEMPLATE_DIR, req.file.filename + ".png");
 
-  await sharp(req.file.path)
-    .png()
-    .toFile(dest);
+  let metadata;
+
+  try {
+    metadata = await sharp(req.file.path).metadata();
+
+    if (!metadata.width || !metadata.height) {
+      throw new Error("Invalid image file");
+    }
+
+     await sharp(req.file.path)
+      .png()
+      .toFile(dest);
+
+   } catch (err) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: "Invalid or corrupted image file" });
+  };
 
   fs.unlinkSync(req.file.path);
   
@@ -173,10 +208,56 @@ app.post("/api/upload-template", authMiddleware, upload.single("template"), asyn
   });
 });
 
+//------------Event Validate-------------------//
+
+function validateEventInput(p) {
+  if (!p.name || typeof p.name !== "string") {
+    return "Event name is required";
+  }
+
+  if (!p.templatePath || typeof p.templatePath !== "string") {
+    return "Template path required";
+  }
+
+  const numericFields = [
+    "nameX", "nameY", "nameW", "nameH", "qrSize"
+  ];
+
+  for (let field of numericFields) {
+  p[field] = Number(p[field]);
+  if (isNaN(p[field])) {
+    return `${field} must be a valid number`;
+  }
+}
+
+  // normalized coordinates must be between 0 and 1
+  const normalized = ["nameX", "nameY", "nameW", "nameH", "qrSize"];
+
+  for (let field of normalized) {
+    if (p[field] < 0 || p[field] > 1) {
+      return `${field} must be between 0 and 1`;
+    }
+  }
+
+  if (p.nameFontSize && (p.nameFontSize < 10 || p.nameFontSize > 300)) {
+    return "Invalid font size";
+  }
+
+  if (p.nameFontColor && !/^#[0-9A-Fa-f]{6}$/.test(p.nameFontColor)) {
+    return "Font color must be valid hex (#RRGGBB)";
+  }
+
+  return null;
+}
+
 // ================= CREATE EVENT =================
 app.post("/api/events", authMiddleware, async (req, res) => {
   const p = req.body;
 
+  const error = validateEventInput(p);
+  if (error) {
+    return res.status(400).json({ error });
+  }
   const stmt = await db.run(`
     INSERT INTO events
     (name,date,venue,orgBy,templatePath,nameBoxX,nameBoxY,nameBoxW,nameBoxH,
@@ -300,8 +381,10 @@ app.get("/form/:id", async (req, res) => {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>${ev.name} - Registration</title>
-
+    <title>${escapeHTML(ev.name)} - Registration</title>
+    <h2>${escapeHTML(ev.name)}</h2>
+    Organized by ${escapeHTML(ev.orgBy)}
+    
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -404,13 +487,36 @@ app.get("/form/:id", async (req, res) => {
   `);
 });
 
+
+function escapeHTML(str) {
+  return String(str).replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  })[m]);
+}
+
 /* ================= CERTIFICATE GENERATION ================= */
 
 async function generateCertificate(ev, data, sendEmail = true) {
 
   const { name, email } = data;
 
-  const tplFull = path.join(__dirname, ev.templatePath.replace(/^\//, ""));
+  const safeTplPath = path.resolve(__dirname, ev.templatePath.replace(/^\//, ""));
+
+  const uploadsRoot = path.resolve(UPLOAD_DIR);
+
+  if (!safeTplPath.startsWith(uploadsRoot)) {
+    throw new Error("Invalid template path detected");
+  }
+
+  if (!fs.existsSync(safeTplPath)) {
+    throw new Error("Template file not found");
+  }
+
+  const tplFull = safeTplPath;
   const meta = await sharp(tplFull).metadata();
   const tplW = meta.width;
   const tplH = meta.height;
@@ -418,7 +524,7 @@ async function generateCertificate(ev, data, sendEmail = true) {
   const boxW = ev.nameBoxW * tplW;
   const boxH = ev.nameBoxH * tplH;
 
-  const safeName = String(name).trim();
+  const safeName = escapeHTML(String(name).trim());
   let fontSize = ev.nameFontSize || 40;
   
   const approxWidth = safeName.length * (fontSize * 0.6);
@@ -488,47 +594,67 @@ async function generateCertificate(ev, data, sendEmail = true) {
   );
 
   // ✅ Email only if allowed
-  if (sendEmail && email) {
+ if (sendEmail && email) {
+  try {
+    if (!process.env.RESEND_API_KEY || !process.env.FROM_EMAIL) {
+      throw new Error("Email service not configured");
+    }
+
+    const certBuffer = fs.readFileSync(certFull);
+
+    // Timeout setup
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: process.env.FROM_EMAIL,
+        to: email,
+        subject: `🎓 Certificate - ${ev.name}`,
+        html: `<p>Dear <b>${safeName}</b>,</p>
+               <p>You successfully participated in <b>${ev.name}</b>.</p>`,
+        attachments: [{
+          filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
+          content: certBuffer.toString("base64")
+        }]
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    let responseData;
     try {
-      const certBuffer = fs.readFileSync(certFull);
+      responseData = await response.json();
+    } catch {
+      responseData = null;
+    }
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: process.env.FROM_EMAIL,
-          to: email,
-          subject: `🎓 Certificate - ${ev.name}`,
-          html: `<p>Dear <b>${safeName}</b>,</p>
-                 <p>You successfully participated in <b>${ev.name}</b>.</p>`,
-          attachments: [{
-            filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
-            content: certBuffer.toString("base64")
-          }]
-        })
-      });
-
-      if (response.ok) {
-        await db.run(
-          `UPDATE responses SET email_status=? WHERE cert_path=?`,
-          "sent",
-          certRel
-        );
-      }
-    } catch (err) {
-      await db.run(
-        `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
-        "failed",
-        err.message,
-        certRel
+    if (!response.ok) {
+      throw new Error(
+        `Email API Error: ${response.status} - ${JSON.stringify(responseData)}`
       );
     }
-  }
 
-  return certRel;
+    await db.run(
+      `UPDATE responses SET email_status=? WHERE cert_path=?`,
+      "sent",
+      certRel
+    );
+
+  } catch (err) {
+    await db.run(
+      `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+      "failed",
+      err.message.slice(0, 500),
+      certRel
+    );
+  }
 }
 // ================= SUBMIT =================
 
@@ -815,12 +941,12 @@ a:hover {
     <h2>✅ Verification Successful</h2>
 
     <p>
-      <b>${rec.name}</b> successfully participated in
-      <b>${ev.name}</b>
+      <b>${escapeHTML(rec.name)}</b> successfully participated in
+      <b>${escapeHTML(ev.name)}</b>
     </p>
 
     <p>
-      Organized by <b>${ev.orgBy}</b> on <b>${ev.date}</b>
+      Organized by <b>${escapeHTML(ev.orgBy)}</b> on <b>${escapeHTML(ev.date)}</b>
     </p>
 
     <a href="${rec.cert_path}" target="_blank">
