@@ -541,13 +541,17 @@ function formatNameCase(name) {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
+
 /* ================= CERTIFICATE GENERATION ================= */
 
 async function generateCertificate(ev, data, sendEmail = true) {
 
   const { name, email } = data;
 
-  const safeTplPath = path.resolve(__dirname, ev.templatePath.replace(/^\//, ""));
+  const safeTplPath = path.resolve(
+    __dirname,
+    ev.templatePath.replace(/^\//, "")
+  );
 
   const uploadsRoot = path.resolve(UPLOAD_DIR);
 
@@ -559,32 +563,28 @@ async function generateCertificate(ev, data, sendEmail = true) {
     throw new Error("Template file not found");
   }
 
-  const tplFull = safeTplPath;
-  const meta = await sharp(tplFull).metadata();
+  const meta = await sharp(safeTplPath).metadata();
   const tplW = meta.width;
   const tplH = meta.height;
 
-  const boxH = ev.nameBoxH * tplH;
-
-// Approximate real width using font size
-  const estimatedTextWidth = formattedName.length * (fontSize * 0.6);
-
-// Add padding
-  const dynamicBoxW = estimatedTextWidth + (fontSize * 2);;
+  /* ===== NAME PREP ===== */
 
   const formattedName = formatNameCase(name);
   const normalizedName = formattedName.toLowerCase();
   const safeName = formattedName.replace(/[<>]/g, "");
-  let fontSize = ev.nameFontSize || 40;
-  
-  let fontSize = ev.nameFontSize || 40;
 
-  // Dynamic width calculation (text shrink नहीं होगा)
-  const estimatedTextWidth = formattedName.length * (fontSize * 0.6);
-  const dynamicBoxW = estimatedTextWidth + (fontSize * 2); // padding
-  const boxH = ev.nameBoxH * tplH;
+  const fontSize = ev.nameFontSize || 40;
 
-// Alignment logic
+  // Dynamic width (text shrink nahi hoga)
+  const avgCharWidth = fontSize * 0.55;
+  const dynamicBoxW = Math.ceil(
+    safeName.length * avgCharWidth + fontSize * 2
+  );
+
+  const boxH = Math.ceil(fontSize * 1.6);
+
+  /* ===== ALIGNMENT (textbox ke andar) ===== */
+
   const align = ev.nameAlign || "center";
 
   let textAnchor = "middle";
@@ -592,26 +592,30 @@ async function generateCertificate(ev, data, sendEmail = true) {
 
   if (align === "left") {
     textAnchor = "start";
-    textX = 0;
+    textX = fontSize * 0.5;
   }
 
   if (align === "right") {
     textAnchor = "end";
-    textX = dynamicBoxW;
+    textX = dynamicBoxW - fontSize * 0.5;
   }
 
   const svg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="${dynamicBoxW}" height="${boxH}">
-    <text x="${textX}" y="${boxH/2}"
+    <text
+      x="${textX}"
+      y="${boxH / 2}"
       font-family="${ev.nameFontFamily || 'Poppins'}"
       font-size="${fontSize}"
-      fill="${ev.nameFontColor}"
+      fill="${ev.nameFontColor || '#000000'}"
       text-anchor="${textAnchor}"
       dominant-baseline="middle">
       ${safeName}
     </text>
   </svg>`;
-  
+
+  /* ===== QR ===== */
+
   const qrToken = jwt.sign(
     { event: ev.id, name: formattedName },
     JWT_SECRET,
@@ -629,10 +633,12 @@ async function generateCertificate(ev, data, sendEmail = true) {
     { width: qrSizePx, errorCorrectionLevel: "H", margin: 6 }
   );
 
+  /* ===== CERTIFICATE FILE ===== */
+
   const certFile = `${Date.now()}-${uuidv4()}.png`;
   const certFull = path.join(CERT_DIR, certFile);
 
-  await sharp(tplFull)
+  await sharp(safeTplPath)
     .composite([
       {
         input: Buffer.from(svg),
@@ -649,7 +655,9 @@ async function generateCertificate(ev, data, sendEmail = true) {
     .toFile(certFull);
 
   const certRel = `/uploads/certs/${certFile}`;
-  
+
+  /* ===== SAVE TO DB ===== */
+
   try {
     await db.run(
       `INSERT INTO responses (event_id,name,email,cert_path,email_status)
@@ -662,10 +670,8 @@ async function generateCertificate(ev, data, sendEmail = true) {
     );
   } catch (err) {
 
-  // 🔥 Duplicate case
     if (err.message.includes("UNIQUE")) {
 
-    // File delete karo jo abhi create hui thi
       if (fs.existsSync(certFull)) {
         fs.unlinkSync(certFull);
       }
@@ -676,70 +682,73 @@ async function generateCertificate(ev, data, sendEmail = true) {
     throw err;
   }
 
-  // ✅ Email only if allowed
- if (sendEmail && email) {
-  try {
-    if (!process.env.RESEND_API_KEY || !process.env.FROM_EMAIL) {
-      throw new Error("Email service not configured");
-    }
+  /* ===== EMAIL SECTION ===== */
 
-    const certBuffer = fs.readFileSync(certFull);
-
-    // Timeout setup
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: process.env.FROM_EMAIL,
-        to: email,
-        subject: `🎓 Certificate - ${ev.name}`,
-        html: `<p>Dear <b>${safeName}</b>,</p>
-               <p>You successfully participated in <b>${ev.name}</b>.</p>`,
-        attachments: [{
-          filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
-          content: certBuffer.toString("base64")
-        }]
-      }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeout);
-
-    let responseData;
+  if (sendEmail && email) {
     try {
-      responseData = await response.json();
-    } catch {
-      responseData = null;
-    }
 
-    if (!response.ok) {
-      throw new Error(
-        `Email API Error: ${response.status} - ${JSON.stringify(responseData)}`
+      if (!process.env.RESEND_API_KEY || !process.env.FROM_EMAIL) {
+        throw new Error("Email service not configured");
+      }
+
+      const certBuffer = fs.readFileSync(certFull);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: process.env.FROM_EMAIL,
+          to: email,
+          subject: `🎓 Certificate - ${ev.name}`,
+          html: `<p>Dear <b>${safeName}</b>,</p>
+                 <p>You successfully participated in <b>${ev.name}</b>.</p>`,
+          attachments: [{
+            filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
+            content: certBuffer.toString("base64")
+          }]
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeout);
+
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch {
+        responseData = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Email API Error: ${response.status} - ${JSON.stringify(responseData)}`
+        );
+      }
+
+      await db.run(
+        `UPDATE responses SET email_status=? WHERE cert_path=?`,
+        "sent",
+        certRel
+      );
+
+    } catch (err) {
+
+      await db.run(
+        `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+        "failed",
+        err.message.slice(0, 500),
+        certRel
       );
     }
-
-    await db.run(
-      `UPDATE responses SET email_status=? WHERE cert_path=?`,
-      "sent",
-      certRel
-    );
-
-  } catch (err) {
-    await db.run(
-      `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
-      "failed",
-      err.message.slice(0, 500),
-      certRel
-    );
   }
-}
-     return certRel;
+
+  return certRel;
 }
 
 // ================= SUBMIT =================
