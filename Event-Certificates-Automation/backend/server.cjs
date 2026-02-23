@@ -106,39 +106,35 @@ async function initDB() {
     driver: sqlite3.Database
   });
 
-  await db.exec(`PRAGMA foreign_keys = ON;`);
+  await db.exec("PRAGMA foreign_keys = ON;");
 
-  // 🔥 ADD INDEXES
-  await db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_responses_event 
-    ON responses(event_id);
+  // Load schema file
+  const schemaPath = path.join(__dirname, "init_db.sql");
 
-    CREATE INDEX IF NOT EXISTS idx_responses_created 
-    ON responses(created_at);
+  if (!fs.existsSync(schemaPath)) {
+    throw new Error("init_db.sql file not found");
+  }
 
-    CREATE INDEX IF NOT EXISTS idx_bulk_jobs_status 
-    ON bulk_jobs(status);
+  const schema = fs.readFileSync(schemaPath, "utf-8");
 
-    CREATE INDEX IF NOT EXISTS idx_events_created 
-    ON events(created_at);
-    
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_event_name
-    ON responses(event_id, name);
-  `);
+  // Execute full schema (tables + indexes + constraints)
+  await db.exec(schema);
 
-  console.log("Database Ready with indexes");
+  console.log("Database initialized successfully");
 }
 
 let server;
 
-initDB().then(() => {
-  server = app.listen(PORT, () => 
-    console.log("Server Running on", PORT)
-  );
-}).catch(err => {
-  console.error("DB Init Failed:", err);
-  process.exit(1);
-});
+initDB()
+  .then(() => {
+    server = app.listen(PORT, () => {
+      console.log("Server Running on", PORT);
+    });
+  })
+  .catch(err => {
+    console.error("DB Init Failed:", err);
+    process.exit(1);
+  });
 
 /* ================= AUTH ================= */
 
