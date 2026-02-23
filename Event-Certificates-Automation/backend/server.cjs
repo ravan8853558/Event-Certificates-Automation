@@ -57,7 +57,9 @@ if (!fs.existsSync(BULK_OUTPUT_DIR)) {
 
 /* ================= EXPRESS ================= */
 const app = express();
-app.use(cors({ origin: "*" }));
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "*"
+}));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(UPLOAD_DIR));
@@ -140,6 +142,7 @@ function authMiddleware(req, res, next) {
 app.get("/", (_, res) => res.json({ status: "OK" }));
 
 // ================= BULK DOWNLOAD =================
+
 app.get("/api/bulk/download/:file", authMiddleware, (req, res) => {
   const file = req.params.file;
   const safePath = path.resolve(BULK_OUTPUT_DIR, file);
@@ -577,157 +580,151 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 `);
 });
 
-/* ================= BULK GENERATE ================= */
+/* ================= BULK PROGRESS STORE ================= */
+
+const bulkJobs = {}; 
+// jobId => { total, done, status, zipName }
+
+/* ================= BULK GENERATE (ASYNC WITH PROGRESS) ================= */
 const bulkLimiter = rateLimit({ windowMs: 60 * 1000, max: 2 });
+
 app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => {
   try {
     const { eventId, nameColumn, tempFile } = req.body;
 
     if (!eventId || !nameColumn || !tempFile)
       return res.status(400).json({ error: "Missing required fields" });
-    
-    // 🔒 Security: prevent path traversal
+
     const safeTempPath = path.resolve(tempFile);
 
-    if (!safeTempPath.startsWith(path.resolve(BULK_DIR))) {
+    if (!safeTempPath.startsWith(path.resolve(BULK_DIR)))
       return res.status(400).json({ error: "Invalid file path" });
-    }
 
     if (!fs.existsSync(safeTempPath))
       return res.status(400).json({ error: "Uploaded file not found" });
 
-    const ev = await db.get(
-      "SELECT * FROM events WHERE id=?",
-      parseInt(eventId)
-    );
-
+    const ev = await db.get("SELECT * FROM events WHERE id=?", parseInt(eventId));
     if (!ev)
       return res.status(404).json({ error: "Event not found" });
 
     const ext = path.extname(safeTempPath).toLowerCase();
     let rows = [];
 
-    /* ================= PARSE CSV ================= */
     if (ext === ".csv") {
-
       const content = fs.readFileSync(safeTempPath);
-
-      rows = parse(content, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-      });
-
+      rows = parse(content, { columns: true, skip_empty_lines: true, trim: true });
     }
-    /* ================= PARSE XLSX ================= */
     else if (ext === ".xlsx") {
-
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(safeTempPath);
-
       const sheet = workbook.worksheets[0];
-
-      if (!sheet)
-        return res.status(400).json({ error: "Excel sheet empty" });
-
       const headers = sheet.getRow(1).values.slice(1);
 
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
-
         let obj = {};
         headers.forEach((h, i) => {
           obj[h] = row.getCell(i + 1).value || "";
         });
-
         rows.push(obj);
       });
-
-    } else {
+    }
+    else {
       return res.status(400).json({ error: "Unsupported file type" });
     }
 
-   if (!rows.length)
-     return res.status(400).json({ error: "No data found in file" });
+    if (!rows.length)
+      return res.status(400).json({ error: "No data found" });
 
-   if (rows.length > 2000)
-     return res.status(400).json({ error: "Maximum 2000 rows allowed per bulk" });
-
-   if (!rows[0][nameColumn])
-     return res.status(400).json({ error: "Invalid name column selected" });
-
-    /* ================= CREATE ZIP ================= */
-
-    const zipName = `bulk-${Date.now()}.zip`;
-    const zipPath = path.join(BULK_OUTPUT_DIR, zipName);
-
-    const output = fs.createWriteStream(zipPath);
-    const archive = archiver("zip", { zlib: { level: 9 } });
-
-    await new Promise((resolve, reject) => {
-      output.on("close", resolve);
-      archive.on("error", reject);
-      archive.finalize();
-    });
-    /* ================= CREATE EXCEL WITH LINKS ================= */
-
-    const outputWorkbook = new ExcelJS.Workbook();
-    const outputSheet = outputWorkbook.addWorksheet("Participants");
-
-    const headers = Object.keys(rows[0]);
-
-    outputSheet.columns = [
-      ...headers.map(h => ({ header: h, key: h, width: 20 })),
-      { header: "Certificate Link", key: "cert_link", width: 45 }
-    ];
-
-    /* ================= GENERATE CERTIFICATES ================= */
-
-    for (let row of rows) {
-
-      const name = String(row[nameColumn] || "").trim();
-      if (!name) continue;
-      
-      const certRel = await generateCertificate(ev, { name, email: "" }, false);
-
-      const certFullPath = path.join(__dirname, certRel.replace(/^\//, ""));
-
-      if (fs.existsSync(certFullPath)) {
-        archive.file(certFullPath, {
-          name: path.basename(certFullPath)
-        });
-      }
-
-      outputSheet.addRow({
-        ...row,
-        cert_link: `${BASE_URL}${certRel}`
-      });
+    if (!rows[0].hasOwnProperty(nameColumn)) {
+      return res.status(400).json({ error: "Invalid name column selected" });
     }
+    
+    const jobId = uuidv4();
 
-    /* ================= ADD EXCEL INTO ZIP ================= */
+    bulkJobs[jobId] = {
+      total: rows.length,
+      done: 0,
+      status: "processing",
+      zipName: null
+    };
 
-    const tempExcelPath = path.join(
-      TEMP_DIR,
-      `bulk-${Date.now()}.xlsx`
-    );
+    res.json({ success: true, jobId });
 
-    await outputWorkbook.xlsx.writeFile(tempExcelPath);
+    /* ===== BACKGROUND PROCESS ===== */
 
-    archive.file(tempExcelPath, {
-      name: "participants_with_links.xlsx"
-    });
+    (async () => {
 
-    await archive.finalize();
+      const zipName = `bulk-${Date.now()}.zip`;
+      const zipPath = path.join(BULK_OUTPUT_DIR, zipName);
 
-    output.on("close", () => {
-      if (fs.existsSync(tempExcelPath)) {
-        fs.unlinkSync(tempExcelPath);
+      const output = fs.createWriteStream(zipPath);
+      const archive = archiver("zip", { zlib: { level: 9 } });
+
+      archive.pipe(output);
+
+      const outputWorkbook = new ExcelJS.Workbook();
+      const outputSheet = outputWorkbook.addWorksheet("Participants");
+
+      const headers = Object.keys(rows[0]);
+
+      outputSheet.columns = [
+        ...headers.map(h => ({ header: h, key: h, width: 20 })),
+        { header: "Certificate Link", key: "cert_link", width: 45 }
+      ];
+
+      for (let row of rows) {
+
+        const name = String(row[nameColumn] || "").trim();
+        if (!name) continue;
+
+        const certRel = await generateCertificate(ev, { name, email: "" }, false);
+        const certFullPath = path.join(__dirname, certRel.replace(/^\//, ""));
+
+        if (fs.existsSync(certFullPath)) {
+          archive.file(certFullPath, { name: path.basename(certFullPath) });
+        }
+
+        outputSheet.addRow({
+          ...row,
+          cert_link: `${BASE_URL}${certRel}`
+        });
+
+        bulkJobs[jobId].done++;
       }
-      res.json({
-        success: true,
-        zipUrl: `${BASE_URL}/bulk_outputs/${zipName}`
-      });
-    });
+
+      const tempExcelPath = path.join(TEMP_DIR, `bulk-${Date.now()}.xlsx`);
+      await outputWorkbook.xlsx.writeFile(tempExcelPath);
+
+      archive.file(tempExcelPath, { name: "participants_with_links.xlsx" });
+
+      await new Promise((resolve, reject) => {
+        archive.on("error", reject);
+
+        output.on("close", () => {
+          bulkJobs[jobId].status = "completed";
+          bulkJobs[jobId].zipName = zipName;
+
+          if (fs.existsSync(safeTempPath)) {
+            fs.unlinkSync(safeTempPath);
+          }
+
+          if (fs.existsSync(tempExcelPath)) {
+            fs.unlinkSync(tempExcelPath);
+          }
+
+          setTimeout(() => {
+            delete bulkJobs[jobId];
+          }, 60 * 60 * 1000);
+
+          resolve();
+        });
+
+  archive.finalize();
+});
+
+    })();
+
   } catch (err) {
     console.error("Bulk error:", err);
     res.status(500).json({ error: "Bulk generation failed" });
@@ -1041,6 +1038,25 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
     console.error("Multiple Excel download error:", err);
     res.status(500).json({ error: "Failed to generate ZIP file" });
   }
+});
+
+app.get("/api/bulk/progress/:jobId", authMiddleware, (req, res) => {
+  const job = bulkJobs[req.params.jobId];
+
+  if (!job)
+    return res.status(404).json({ error: "Job not found" });
+
+    const percent = job.total > 0
+      ? Math.floor((job.done / job.total) * 100)
+      : 0;
+  
+  res.json({
+    status: job.status,
+    percent,
+    zipUrl: job.status === "completed"
+      ? `${BASE_URL}/api/bulk/download/${job.zipName}`
+      : null
+  });
 });
 
 /* ========= BULK HISTORY ========= */
