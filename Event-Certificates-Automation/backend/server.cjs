@@ -58,7 +58,7 @@ if (!fs.existsSync(BULK_OUTPUT_DIR)) {
 /* ================= EXPRESS ================= */
 const app = express();
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "*"
+  origin: process.env.FRONTEND_URL
 }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -70,52 +70,26 @@ const submitLimiter = rateLimit({ windowMs: 60 * 1000, max: 5 });
 /* ================= DATABASE ================= */
 
 let db;
-(async () => {
+
+async function initDB() {
   db = await open({
     filename: path.join(__dirname, "data.db"),
     driver: sqlite3.Database
   });
 
-  await db.exec(`
-    PRAGMA foreign_keys = ON;
-
-    CREATE TABLE IF NOT EXISTS events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      date TEXT,
-      venue TEXT,
-      orgBy TEXT,
-      templatePath TEXT,
-      nameBoxX REAL,
-      nameBoxY REAL,
-      nameBoxW REAL,
-      nameBoxH REAL,
-      nameFontFamily TEXT,
-      nameFontSize INTEGER,
-      nameFontColor TEXT,
-      qrSize REAL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS responses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_id INTEGER,
-      name TEXT,
-      email TEXT,
-      mobile TEXT,
-      dept TEXT,
-      year TEXT,
-      enroll TEXT,
-      cert_path TEXT,
-      email_status TEXT,
-      email_error TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
-    );
-  `);
-
+  await db.exec(`PRAGMA foreign_keys = ON;`);
+  
   console.log("Database Ready");
-})();
+}
+
+initDB().then(() => {
+  app.listen(PORT, () => 
+    console.log("Server Running on", PORT)
+  );
+}).catch(err => {
+  console.error("DB Init Failed:", err);
+  process.exit(1);
+});
 
 /* ================= AUTH ================= */
 
@@ -182,8 +156,13 @@ app.post("/api/upload-template", authMiddleware, upload.single("template"), asyn
     return res.status(400).json({ error: "Invalid file type" });
 
   const dest = path.join(TEMPLATE_DIR, req.file.filename + ".png");
-  fs.renameSync(req.file.path, dest);
 
+  await sharp(req.file.path)
+    .png()
+    .toFile(dest);
+
+  fs.unlinkSync(req.file.path);
+  
   const meta = await sharp(dest).metadata();
 
   res.json({
@@ -440,8 +419,8 @@ async function generateCertificate(ev, data, sendEmail = true) {
   const boxH = ev.nameBoxH * tplH;
 
   const safeName = String(name).trim();
-  let fontSize = ev.nameFontSize;
-
+  let fontSize = ev.nameFontSize || 40;
+  
   const approxWidth = safeName.length * (fontSize * 0.6);
   if (approxWidth > boxW) {
     fontSize = Math.floor((boxW / approxWidth) * fontSize * 0.95);
@@ -580,11 +559,6 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 `);
 });
 
-/* ================= BULK PROGRESS STORE ================= */
-
-const bulkJobs = {}; 
-// jobId => { total, done, status, zipName }
-
 /* ================= BULK GENERATE (ASYNC WITH PROGRESS) ================= */
 const bulkLimiter = rateLimit({ windowMs: 60 * 1000, max: 2 });
 
@@ -636,18 +610,22 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     if (!rows.length)
       return res.status(400).json({ error: "No data found" });
 
+    if (rows.length > 2000)
+      return res.status(400).json({ error: "Maximum 2000 rows allowed" });
+
     if (!rows[0].hasOwnProperty(nameColumn)) {
       return res.status(400).json({ error: "Invalid name column selected" });
     }
-    
-    const jobId = uuidv4();
 
-    bulkJobs[jobId] = {
-      total: rows.length,
-      done: 0,
-      status: "processing",
-      zipName: null
-    };
+    const jobId = uuidv4();
+    
+    await db.run(
+      `INSERT INTO bulk_jobs (id, event_id, total)
+       VALUES (?, ?, ?)`,
+      jobId,
+      eventId,
+      rows.length
+    );
 
     res.json({ success: true, jobId });
 
@@ -685,12 +663,25 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
           archive.file(certFullPath, { name: path.basename(certFullPath) });
         }
 
-        outputSheet.addRow({
-          ...row,
+        const safeRow = {};
+
+        for (let key in row) {
+          let val = String(row[key] || "");
+          if (val.startsWith("=")) val = "'" + val;
+          safeRow[key] = val;
+        }
+
+          outputSheet.addRow({
+          ...safeRow,
           cert_link: `${BASE_URL}${certRel}`
         });
 
-        bulkJobs[jobId].done++;
+        await db.run(
+          `UPDATE bulk_jobs 
+           SET completed = completed + 1 
+           WHERE id = ?`,
+          jobId
+        );      
       }
 
       const tempExcelPath = path.join(TEMP_DIR, `bulk-${Date.now()}.xlsx`);
@@ -701,24 +692,25 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
       await new Promise((resolve, reject) => {
         archive.on("error", reject);
 
-        output.on("close", () => {
-          bulkJobs[jobId].status = "completed";
-          bulkJobs[jobId].zipName = zipName;
+        output.on("close", async () => {
+           await db.run(
+              `UPDATE bulk_jobs 
+               SET status = 'completed', zip_name = ?
+               WHERE id = ?`,
+              zipName,
+              jobId
+          );
 
-          if (fs.existsSync(safeTempPath)) {
-            fs.unlinkSync(safeTempPath);
-          }
+        if (fs.existsSync(safeTempPath)) {
+          fs.unlinkSync(safeTempPath);
+        }
 
-          if (fs.existsSync(tempExcelPath)) {
-            fs.unlinkSync(tempExcelPath);
-          }
+        if (fs.existsSync(tempExcelPath)) {
+          fs.unlinkSync(tempExcelPath);
+        }
 
-          setTimeout(() => {
-            delete bulkJobs[jobId];
-          }, 60 * 60 * 1000);
-
-          resolve();
-        });
+        resolve();
+      });
 
   archive.finalize();
 });
@@ -1024,8 +1016,7 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
       let csv = "Name,Email,Mobile,Dept,Year,Enroll,Certificate\n";
 
       responses.forEach(r => {
-        csv += `"${r.name}","${r.email}","${r.mobile}","${r.dept}",
-"${r.year}","${r.enroll}","${BASE_URL}${r.cert_path}"\n`;
+        csv += `"${r.name}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${BASE_URL}${r.cert_path}"\n`;
       });
 
       const safeName = event.name.replace(/[^\w]/g, "_");
@@ -1040,21 +1031,25 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
   }
 });
 
-app.get("/api/bulk/progress/:jobId", authMiddleware, (req, res) => {
-  const job = bulkJobs[req.params.jobId];
+app.get("/api/bulk/progress/:jobId", authMiddleware, async (req, res) => {
+
+  const job = await db.get(
+    "SELECT * FROM bulk_jobs WHERE id=?",
+    req.params.jobId
+  );
 
   if (!job)
     return res.status(404).json({ error: "Job not found" });
 
-    const percent = job.total > 0
-      ? Math.floor((job.done / job.total) * 100)
-      : 0;
-  
+  const percent = job.total > 0
+    ? Math.floor((job.completed / job.total) * 100)
+    : 0;
+
   res.json({
     status: job.status,
     percent,
     zipUrl: job.status === "completed"
-      ? `${BASE_URL}/api/bulk/download/${job.zipName}`
+      ? `${BASE_URL}/api/bulk/download/${job.zip_name}`
       : null
   });
 });
@@ -1077,6 +1072,3 @@ app.get("/api/bulk/history", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Failed to load history" });
   }
 });
-/* ================= START ================= */
-
-app.listen(PORT, () => console.log("Server Running on", PORT));
