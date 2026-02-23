@@ -223,8 +223,17 @@ app.get("/api/events", authMiddleware, async (_, res) => {
 /* ================= BULK FILE UPLOAD ================= */
 
 const bulkUpload = multer({
-  dest: BULK_DIR,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, BULK_DIR);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, unique + ext);
+    }
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (req, res) => {
