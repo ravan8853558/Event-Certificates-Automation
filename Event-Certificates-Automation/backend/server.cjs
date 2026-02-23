@@ -564,32 +564,54 @@ async function generateCertificate(ev, data, sendEmail = true) {
   const tplW = meta.width;
   const tplH = meta.height;
 
-  const boxW = ev.nameBoxW * tplW;
   const boxH = ev.nameBoxH * tplH;
+
+// Approximate real width using font size
+  const estimatedTextWidth = formattedName.length * (fontSize * 0.6);
+
+// Add padding
+  const dynamicBoxW = estimatedTextWidth + (fontSize * 2);;
 
   const formattedName = formatNameCase(name);
   const normalizedName = formattedName.toLowerCase();
   const safeName = formattedName.replace(/[<>]/g, "");
   let fontSize = ev.nameFontSize || 40;
   
-  const approxWidth = safeName.length * (fontSize * 0.6);
-  if (approxWidth > boxW) {
-    fontSize = Math.floor((boxW / approxWidth) * fontSize * 0.95);
+  let fontSize = ev.nameFontSize || 40;
+
+  // Dynamic width calculation (text shrink नहीं होगा)
+  const estimatedTextWidth = formattedName.length * (fontSize * 0.6);
+  const dynamicBoxW = estimatedTextWidth + (fontSize * 2); // padding
+  const boxH = ev.nameBoxH * tplH;
+
+// Alignment logic
+  const align = ev.nameAlign || "center";
+
+  let textAnchor = "middle";
+  let textX = dynamicBoxW / 2;
+
+  if (align === "left") {
+    textAnchor = "start";
+    textX = 0;
   }
-  fontSize = Math.max(fontSize, 18);
+
+  if (align === "right") {
+    textAnchor = "end";
+    textX = dynamicBoxW;
+  }
 
   const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="${boxW}" height="${boxH}">
-    <text x="${boxW/2}" y="${boxH/2}"
+  <svg xmlns="http://www.w3.org/2000/svg" width="${dynamicBoxW}" height="${boxH}">
+    <text x="${textX}" y="${boxH/2}"
       font-family="${ev.nameFontFamily || 'Poppins'}"
       font-size="${fontSize}"
       fill="${ev.nameFontColor}"
-      text-anchor="middle"
+      text-anchor="${textAnchor}"
       dominant-baseline="middle">
       ${safeName}
     </text>
   </svg>`;
-
+  
   const qrToken = jwt.sign(
     { event: ev.id, name: formattedName },
     JWT_SECRET,
@@ -614,7 +636,7 @@ async function generateCertificate(ev, data, sendEmail = true) {
     .composite([
       {
         input: Buffer.from(svg),
-        left: Math.round(ev.nameBoxX * tplW - boxW / 2),
+        left: Math.round(ev.nameBoxX * tplW - dynamicBoxW / 2),
         top: Math.round(ev.nameBoxY * tplH - boxH / 2)
       },
       {
