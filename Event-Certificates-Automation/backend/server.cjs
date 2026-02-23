@@ -148,7 +148,7 @@ app.get("/", (_, res) => res.json({ status: "OK" }));
 
 // ================= BULK DOWNLOAD =================
 
-app.get("/api/bulk/download/:file", authMiddleware, (req, res) => {
+app.get("/api/bulk/download/:file", (req, res) => {
   const file = req.params.file;
   const safePath = path.resolve(BULK_OUTPUT_DIR, file);
 
