@@ -1,13 +1,15 @@
 {
   "name": "uem-event-certificates-backend",
   "version": "1.0.0",
+  "description": "Event Certificate Automation Backend",
   "main": "server.cjs",
   "type": "commonjs",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "start": "node server.cjs"
+    "start": "node server.cjs",
+    "dev": "node --watch server.cjs"
   },
   "dependencies": {
     "archiver": "^6.0.2",
@@ -18,8 +20,10 @@
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "express-rate-limit": "^7.3.0",
+    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.2",
+    "node-fetch": "^3.3.2",
     "qrcode": "^1.5.4",
     "sharp": "^0.33.2",
     "sqlite": "^4.2.1",
