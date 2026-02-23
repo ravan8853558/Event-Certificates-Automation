@@ -18,15 +18,13 @@ CREATE TABLE IF NOT EXISTS events (
   nameFontSize INTEGER CHECK(nameFontSize >= 10 AND nameFontSize <= 300),
   nameFontColor TEXT CHECK(nameFontColor LIKE '#______'),
 
+  nameAlign TEXT DEFAULT 'center'
+    CHECK(nameAlign IN ('left','center','right')),
+
   qrSize REAL CHECK(qrSize >= 0 AND qrSize <= 1),
 
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX IF NOT EXISTS idx_events_created
-ON events(created_at);
-
-
 -- ================= RESPONSES TABLE =================
 CREATE TABLE IF NOT EXISTS responses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,3 +82,4 @@ CREATE TABLE IF NOT EXISTS bulk_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_bulk_jobs_status
 ON bulk_jobs(status);
+
