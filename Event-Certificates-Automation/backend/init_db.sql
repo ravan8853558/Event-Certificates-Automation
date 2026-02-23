@@ -33,3 +33,13 @@ CREATE TABLE IF NOT EXISTS responses (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS bulk_jobs (
+  id TEXT PRIMARY KEY,
+  event_id INTEGER,
+  total INTEGER,
+  completed INTEGER,
+  status TEXT,
+  zip_name TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
