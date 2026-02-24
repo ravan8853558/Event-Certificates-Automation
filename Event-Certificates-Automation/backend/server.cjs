@@ -660,11 +660,16 @@ async function generateCertificate(ev, data, sendEmail = true) {
 
   try {
     await db.run(
-      `INSERT INTO responses (event_id,name,email,cert_path,email_status)
-       VALUES (?,?,?,?,?)`,
+      `INSERT INTO responses 
+       (event_id, name, email, mobile, dept, year, enroll, cert_path, email_status)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
       ev.id,
       normalizedName,
       email || "",
+      data.mobile || "",
+      data.dept || "",
+      data.year || "",
+      data.enroll || "",
       certRel,
       "generated"
     );
