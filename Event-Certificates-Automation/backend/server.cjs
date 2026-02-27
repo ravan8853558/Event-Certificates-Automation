@@ -217,9 +217,9 @@ app.post("/api/upload-template", authMiddleware, upload.single("template"), asyn
 
      await sharp(req.file.path)
        .resize({ width: 1400, withoutEnlargement: true })  // reduce width
-    .png({
-      compressionLevel: 9,
-      palette: true   // HUGE size reduction
+    .webp({
+      quality: 90
+    })
         })
        .toFile(dest);
 
@@ -659,7 +659,7 @@ const qrBuffer = await QRCode.toBuffer(
   
 /* ===== CERTIFICATE FILE ===== */
 
-const certFile = `${Date.now()}-${uuidv4()}.png`;
+const certFile = `${Date.now()}-${uuidv4()}.webp`;
 const certFull = path.join(CERT_DIR, certFile);
   
 /* ===== SAFE POSITION CALCULATION ===== */
