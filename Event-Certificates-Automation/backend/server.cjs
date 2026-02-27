@@ -11,6 +11,7 @@ const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
 sharp.cache(false);
 sharp.concurrency(1);
+sharp.simd(false);
 const QRCode = require("qrcode");
 const bcrypt = require("bcryptjs");
 const rateLimit = require("express-rate-limit");
@@ -620,30 +621,46 @@ async function generateCertificate(ev, data, sendEmail = true) {
     </text>
   </svg>`;
 
-  /* ===== QR ===== */
+/* ===== QR ===== */
 
-  const qrToken = jwt.sign(
-    { event: ev.id, name: formattedName },
-    JWT_SECRET,
-    { expiresIn: "30d" }
-  );
+const qrToken = jwt.sign(
+  { event: ev.id, name: formattedName },
+  JWT_SECRET,
+  { expiresIn: "30d" }
+);
 
-  let qrSizePx = Math.round((ev.qrSize || 0.18) * tplW);
-  qrSizePx = Math.max(qrSizePx, 180);
-  qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.25));
-  
-  const padding = Math.round(tplW * 0.04);
+// Base calculation
+let qrSizePx = Math.round((ev.qrSize || 0.18) * tplW);
 
-  const qrBuffer = await QRCode.toBuffer(
-    `${BASE_URL}/verify/${qrToken}`,
-    { width: qrSizePx, errorCorrectionLevel: "H", margin: 6 }
-  );
+// Hard safety clamps
+qrSizePx = Math.max(qrSizePx, 120);
+qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.25));
+qrSizePx = Math.min(qrSizePx, tplW, tplH);
+
+// Padding
+const padding = Math.round(tplW * 0.04);
+
+// Generate QR WITHOUT margin inflation
+let qrBuffer = await QRCode.toBuffer(
+  `${BASE_URL}/verify/${qrToken}`,
+  {
+    width: qrSizePx,
+    margin: 0,                  // critical fix
+    errorCorrectionLevel: "M"   // lighter than H
+  }
+);
+
+// FORCE exact dimensions (guaranteed square)
+qrBuffer = await sharp(qrBuffer)
+  .resize(qrSizePx, qrSizePx)
+  .png()
+  .toBuffer();
 
 /* ===== CERTIFICATE FILE ===== */
 
 const certFile = `${Date.now()}-${uuidv4()}.png`;
 const certFull = path.join(CERT_DIR, certFile);
-
+  
 /* ===== SAFE POSITION CALCULATION ===== */
 
 // Absolute hard limits
@@ -685,13 +702,13 @@ await sharp(safeTplPath)
     },
     {
       input: qrBuffer,
-      left: Math.max(0, tplW - qrSizePx - padding),
-      top: Math.max(0, tplH - qrSizePx - padding)
+      left: Math.max(0, Math.min(tplW - qrSizePx - padding, tplW - qrSizePx)),
+      top: Math.max(0, Math.min(tplH - qrSizePx - padding, tplH - qrSizePx))
     }
   ])
   .png({ compressionLevel: 9 })
   .toFile(certFull);
-
+  
 const certRel = `/uploads/certs/${certFile}`;
   
   /* ===== SAVE TO DB ===== */
