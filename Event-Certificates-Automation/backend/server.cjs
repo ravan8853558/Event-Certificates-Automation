@@ -629,33 +629,31 @@ const qrToken = jwt.sign(
   { expiresIn: "30d" }
 );
 
-// Base calculation
-let qrSizePx = Math.round((ev.qrSize || 0.18) * tplW);
+// Better size calculation
+let qrSizePx = Math.round((ev.qrSize || 0.20) * tplW);
 
-// Hard safety clamps
-qrSizePx = Math.max(qrSizePx, 120);
-qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.25));
-qrSizePx = Math.min(qrSizePx, tplW, tplH);
+// Safe minimum for long JWT
+qrSizePx = Math.max(qrSizePx, 220);
 
-// Padding
+// Never exceed 28% of template width
+qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.28));
+
 const padding = Math.round(tplW * 0.04);
 
-// Generate QR WITHOUT margin inflation
-let qrBuffer = await QRCode.toBuffer(
+// Generate QR with proper quiet zone
+const qrBuffer = await QRCode.toBuffer(
   `${BASE_URL}/verify/${qrToken}`,
   {
     width: qrSizePx,
-    margin: 0,                  // critical fix
-    errorCorrectionLevel: "M"   // lighter than H
+    margin: 4,                 // REQUIRED for scanning
+    errorCorrectionLevel: "H", // High reliability
+    color: {
+      dark: "#000000",
+      light: "#FFFFFF"
+    }
   }
 );
-
-// FORCE exact dimensions (guaranteed square)
-qrBuffer = await sharp(qrBuffer)
-  .resize(qrSizePx, qrSizePx)
-  .png()
-  .toBuffer();
-
+  
 /* ===== CERTIFICATE FILE ===== */
 
 const certFile = `${Date.now()}-${uuidv4()}.png`;
