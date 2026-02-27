@@ -204,12 +204,7 @@ const upload = multer({
 app.post("/api/upload-template", authMiddleware, upload.single("template"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
 
-  const dest = path.join(TEMPLATE_DIR, req.file.filename + ".webp");
-
-  await sharp(req.file.path)
-    .resize({ width: 1400, withoutEnlargement: true })
-    .webp({ quality: 90 })
-    .toFile(dest);
+  const dest = path.join(TEMPLATE_DIR, req.file.filename + ".png");
 
   let metadata;
 
@@ -221,11 +216,8 @@ app.post("/api/upload-template", authMiddleware, upload.single("template"), asyn
     }
 
      await sharp(req.file.path)
-       .resize({ width: 1400, withoutEnlargement: true })  // reduce width
-    .webp({
-      quality: 90
-    })
-        })
+       .resize({ width: 2000, withoutEnlargement: true })
+       .png({ compressionLevel: 9 })
        .toFile(dest);
 
    } catch (err) {
@@ -396,8 +388,8 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
     if (!rows.length)
       return res.status(400).json({ error: "No data found in file" });
 
-    if (rows.length > 300)
-      return res.status(400).json({ error: "Maximum 300 rows allowed per bulk" });
+    if (rows.length > 500)
+      return res.status(400).json({ error: "Maximum 500 rows allowed per bulk" });
 
     const columns = Object.keys(rows[0]);
 
@@ -664,7 +656,7 @@ const qrBuffer = await QRCode.toBuffer(
   
 /* ===== CERTIFICATE FILE ===== */
 
-const certFile = `${Date.now()}-${uuidv4()}.webp`;
+const certFile = `${Date.now()}-${uuidv4()}.png`;
 const certFull = path.join(CERT_DIR, certFile);
   
 /* ===== SAFE POSITION CALCULATION ===== */
@@ -712,9 +704,7 @@ await sharp(safeTplPath)
       top: Math.max(0, Math.min(tplH - qrSizePx - padding, tplH - qrSizePx))
     }
   ])
-  .webp({
-    quality: 90
-  })
+  .png({ compressionLevel: 9 })
   .toFile(certFull);
   
 const certRel = `/uploads/certs/${certFile}`;
@@ -919,8 +909,8 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     if (!rows.length)
       return res.status(400).json({ error: "No data found" });
 
-    if (rows.length > 300)
-      return res.status(400).json({ error: "Maximum 300 rows allowed" });
+    if (rows.length > 500)
+      return res.status(400).json({ error: "Maximum 500 rows allowed" });
 
     if (!rows[0].hasOwnProperty(nameColumn)) {
       return res.status(400).json({ error: "Invalid name column selected" });
@@ -947,7 +937,7 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     const zipPath = path.join(BULK_OUTPUT_DIR, zipName);
 
     const output = fs.createWriteStream(zipPath);
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    const archive = archiver("zip", { zlib: { level: 6 } });
 
     archive.pipe(output);
 
