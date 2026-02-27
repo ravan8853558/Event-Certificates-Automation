@@ -646,23 +646,42 @@ const certFull = path.join(CERT_DIR, certFile);
 
 /* ===== SAFE POSITION CALCULATION ===== */
 
-let left = Math.round(ev.nameBoxX * tplW - finalBoxW / 2);
-let top  = Math.round(ev.nameBoxY * tplH - boxH / 2);
+// Absolute hard limits
+const safeBoxW = Math.min(finalBoxW, tplW);
+const safeBoxH = Math.min(boxH, tplH);
 
-// Protect against corrupted or invalid values
-if (!Number.isFinite(left)) left = 0;
-if (!Number.isFinite(top)) top = 0;
+// Ensure SVG never exceeds template
+const safeSvg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${safeBoxW}" height="${safeBoxH}">
+  <text
+    x="${safeBoxW / 2}"
+    y="${safeBoxH / 2}"
+    font-family="${ev.nameFontFamily || 'Poppins'}"
+    font-size="${fontSize}"
+    fill="${ev.nameFontColor || '#000000'}"
+    text-anchor="middle"
+    dominant-baseline="middle">
+    ${safeName}
+  </text>
+</svg>`;
 
-// Clamp inside template boundaries
-left = Math.max(0, Math.min(left, tplW - finalBoxW));
-top  = Math.max(0, Math.min(top, tplH - boxH));
+// Position
+let left = Math.round(ev.nameBoxX * tplW - safeBoxW / 2);
+let top  = Math.round(ev.nameBoxY * tplH - safeBoxH / 2);
+
+// Clamp inside template
+left = Math.max(0, Math.min(left, tplW - safeBoxW));
+top  = Math.max(0, Math.min(top, tplH - safeBoxH));
+
+// Clamp QR size strictly
+qrSizePx = Math.min(qrSizePx, tplW, tplH);
 
 await sharp(safeTplPath)
   .composite([
     {
-      input: Buffer.from(svg),
-      left: left,
-      top: top
+      input: Buffer.from(safeSvg),
+      left,
+      top
     },
     {
       input: qrBuffer,
