@@ -204,7 +204,12 @@ const upload = multer({
 app.post("/api/upload-template", authMiddleware, upload.single("template"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
 
-  const dest = path.join(TEMPLATE_DIR, req.file.filename + ".png");
+  const dest = path.join(TEMPLATE_DIR, req.file.filename + ".webp");
+
+  await sharp(req.file.path)
+    .resize({ width: 1400, withoutEnlargement: true })
+    .webp({ quality: 90 })
+    .toFile(dest);
 
   let metadata;
 
@@ -707,9 +712,8 @@ await sharp(safeTplPath)
       top: Math.max(0, Math.min(tplH - qrSizePx - padding, tplH - qrSizePx))
     }
   ])
-  .png({
-    compressionLevel: 9,
-    palette: true
+  .webp({
+    quality: 90
   })
   .toFile(certFull);
   
