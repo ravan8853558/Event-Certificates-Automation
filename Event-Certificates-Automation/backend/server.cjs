@@ -9,6 +9,8 @@ const cors = require("cors");
 const multer = require("multer");
 const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
+sharp.cache(false);
+sharp.concurrency(1);
 const QRCode = require("qrcode");
 const bcrypt = require("bcryptjs");
 const rateLimit = require("express-rate-limit");
@@ -213,8 +215,9 @@ app.post("/api/upload-template", authMiddleware, upload.single("template"), asyn
     }
 
      await sharp(req.file.path)
-      .png()
-      .toFile(dest);
+       .resize({ width: 2000, withoutEnlargement: true })
+       .png({ compressionLevel: 9 })
+       .toFile(dest);
 
    } catch (err) {
     fs.unlinkSync(req.file.path);
@@ -384,8 +387,8 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
     if (!rows.length)
       return res.status(400).json({ error: "No data found in file" });
 
-    if (rows.length > 2000)
-      return res.status(400).json({ error: "Maximum 2000 rows allowed per bulk" });
+    if (rows.length > 500)
+      return res.status(400).json({ error: "Maximum 500 rows allowed per bulk" });
 
     const columns = Object.keys(rows[0]);
 
@@ -580,6 +583,9 @@ async function generateCertificate(ev, data, sendEmail = true) {
   const dynamicBoxW = Math.ceil(
     safeName.length * avgCharWidth + fontSize * 2
   );
+  
+  const maxNameWidth = tplW * 0.8;
+  const finalBoxW = Math.min(dynamicBoxW, maxNameWidth);
 
   const boxH = Math.ceil(fontSize * 1.6);
 
@@ -588,7 +594,7 @@ async function generateCertificate(ev, data, sendEmail = true) {
   const align = ev.nameAlign || "center";
 
   let textAnchor = "middle";
-  let textX = dynamicBoxW / 2;
+  let textX = finalBoxW / 2;
 
   if (align === "left") {
     textAnchor = "start";
@@ -597,11 +603,11 @@ async function generateCertificate(ev, data, sendEmail = true) {
 
   if (align === "right") {
     textAnchor = "end";
-    textX = dynamicBoxW - fontSize * 0.5;
+    textX = finalBoxW - fontSize * 0.5;
   }
 
   const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="${dynamicBoxW}" height="${boxH}">
+  <svg xmlns="http://www.w3.org/2000/svg" width="${finalBoxW}" height="${boxH}">
     <text
       x="${textX}"
       y="${boxH / 2}"
@@ -624,8 +630,8 @@ async function generateCertificate(ev, data, sendEmail = true) {
 
   let qrSizePx = Math.round((ev.qrSize || 0.18) * tplW);
   qrSizePx = Math.max(qrSizePx, 180);
-  qrSizePx = Math.min(qrSizePx, tplW * 0.25);
-
+  qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.25));
+  
   const padding = Math.round(tplW * 0.04);
 
   const qrBuffer = await QRCode.toBuffer(
@@ -633,29 +639,42 @@ async function generateCertificate(ev, data, sendEmail = true) {
     { width: qrSizePx, errorCorrectionLevel: "H", margin: 6 }
   );
 
-  /* ===== CERTIFICATE FILE ===== */
+/* ===== CERTIFICATE FILE ===== */
 
-  const certFile = `${Date.now()}-${uuidv4()}.png`;
-  const certFull = path.join(CERT_DIR, certFile);
+const certFile = `${Date.now()}-${uuidv4()}.png`;
+const certFull = path.join(CERT_DIR, certFile);
 
-  await sharp(safeTplPath)
-    .composite([
-      {
-        input: Buffer.from(svg),
-        left: Math.round(ev.nameBoxX * tplW - dynamicBoxW / 2),
-        top: Math.round(ev.nameBoxY * tplH - boxH / 2)
-      },
-      {
-        input: qrBuffer,
-        left: tplW - qrSizePx - padding,
-        top: tplH - qrSizePx - padding
-      }
-    ])
-    .png({ quality: 100 })
-    .toFile(certFull);
+/* ===== SAFE POSITION CALCULATION ===== */
 
-  const certRel = `/uploads/certs/${certFile}`;
+let left = Math.round(ev.nameBoxX * tplW - finalBoxW / 2);
+let top  = Math.round(ev.nameBoxY * tplH - boxH / 2);
 
+// Protect against corrupted or invalid values
+if (!Number.isFinite(left)) left = 0;
+if (!Number.isFinite(top)) top = 0;
+
+// Clamp inside template boundaries
+left = Math.max(0, Math.min(left, tplW - finalBoxW));
+top  = Math.max(0, Math.min(top, tplH - boxH));
+
+await sharp(safeTplPath)
+  .composite([
+    {
+      input: Buffer.from(svg),
+      left: left,
+      top: top
+    },
+    {
+      input: qrBuffer,
+      left: Math.max(0, tplW - qrSizePx - padding),
+      top: Math.max(0, tplH - qrSizePx - padding)
+    }
+  ])
+  .png({ compressionLevel: 9 })
+  .toFile(certFull);
+
+const certRel = `/uploads/certs/${certFile}`;
+  
   /* ===== SAVE TO DB ===== */
 
   try {
@@ -856,8 +875,8 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     if (!rows.length)
       return res.status(400).json({ error: "No data found" });
 
-    if (rows.length > 2000)
-      return res.status(400).json({ error: "Maximum 2000 rows allowed" });
+    if (rows.length > 500)
+      return res.status(400).json({ error: "Maximum 500 rows allowed" });
 
     if (!rows[0].hasOwnProperty(nameColumn)) {
       return res.status(400).json({ error: "Invalid name column selected" });
@@ -884,7 +903,7 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     const zipPath = path.join(BULK_OUTPUT_DIR, zipName);
 
     const output = fs.createWriteStream(zipPath);
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    const archive = archiver("zip", { zlib: { level: 6 } });
 
     archive.pipe(output);
 
