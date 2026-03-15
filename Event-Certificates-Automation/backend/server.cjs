@@ -919,6 +919,8 @@ if (sendEmail && email) {
     );
   }
 }
+  return certRel;
+}
   
 // ================= SUBMIT =================
 app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
