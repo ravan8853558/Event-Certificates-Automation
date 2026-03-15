@@ -249,7 +249,8 @@ function validateEventInput(p) {
   }
 
   const numericFields = [
-    "nameX", "nameY", "nameW", "nameH", "qrSize"
+  "nameX","nameY","nameW","nameH",
+  "qrX","qrY","qrSize"
   ];
 
   for (let field of numericFields) {
@@ -260,8 +261,15 @@ function validateEventInput(p) {
 }
 
   // normalized coordinates must be between 0 and 1
-  const normalized = ["nameX", "nameY", "nameW", "nameH", "qrSize"];
-
+  const normalized = [
+    "nameX",
+    "nameY",
+    "nameW",
+    "nameH",
+    "qrX",
+    "qrY",
+    "qrSize"
+  ];
   for (let field of normalized) {
     if (p[field] < 0 || p[field] > 1) {
       return `${field} must be between 0 and 1`;
@@ -287,7 +295,11 @@ app.post("/api/events", authMiddleware, async (req, res) => {
   if (error) {
     return res.status(400).json({ error });
   }
-  const templateFull = path.resolve(__dirname, p.templatePath.replace(/^\//, ""));
+
+  const templateFull = path.resolve(
+    __dirname,
+    p.templatePath.replace(/^\//, "")
+  );
 
   if (!templateFull.startsWith(path.resolve(UPLOAD_DIR))) {
     return res.status(400).json({ error: "Invalid template path" });
@@ -296,15 +308,43 @@ app.post("/api/events", authMiddleware, async (req, res) => {
   if (!fs.existsSync(templateFull)) {
     return res.status(400).json({ error: "Template file not found" });
   }
-  const stmt = await db.run(`
+
+  const stmt = await db.run(
+    `
     INSERT INTO events
-    (name,date,venue,orgBy,templatePath,nameBoxX,nameBoxY,nameBoxW,nameBoxH,
-     nameFontFamily,nameFontSize,nameFontColor,qrSize)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-  `,
-    p.name, p.date, p.venue, p.orgBy, p.templatePath,
-    p.nameX, p.nameY, p.nameW, p.nameH,
-    p.nameFontFamily, p.nameFontSize, p.nameFontColor,
+    (
+      name,
+      date,
+      venue,
+      orgBy,
+      templatePath,
+      nameBoxX,
+      nameBoxY,
+      nameBoxW,
+      nameBoxH,
+      nameFontFamily,
+      nameFontSize,
+      nameFontColor,
+      qrX,
+      qrY,
+      qrSize
+    )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `,
+    p.name,
+    p.date,
+    p.venue,
+    p.orgBy,
+    p.templatePath,
+    p.nameX,
+    p.nameY,
+    p.nameW,
+    p.nameH,
+    p.nameFontFamily,
+    p.nameFontSize,
+    p.nameFontColor,
+    p.qrX,
+    p.qrY,
     p.qrSize
   );
 
@@ -575,8 +615,7 @@ async function generateCertificate(ev, data, sendEmail = true) {
 
   const formattedName = formatNameCase(name);
   const normalizedName = formattedName.toLowerCase();
-  const safeName = formattedName.replace(/[<>]/g, "");
-
+  const safeName = formattedName.replace(/[<>]/g, "").slice(0,120);
   const fontSize = ev.nameFontSize || 40;
 
   // Dynamic width (text shrink nahi hoga)
@@ -630,14 +669,22 @@ const qrToken = jwt.sign(
 );
 
 // Better size calculation
-let qrSizePx = Math.round((ev.qrSize || 0.20) * tplW);
+let qrSizePx = Math.round(ev.qrSize * tplW);
 
+let qrLeft = Math.round(ev.qrX * tplW);
+let qrTop = Math.round(ev.qrY * tplH);
+
+// clamp inside template
+qrLeft = Math.max(0, Math.min(qrLeft, tplW - qrSizePx));
+qrTop = Math.max(0, Math.min(qrTop, tplH - qrSizePx));
+  
 // Safe minimum for long JWT
 qrSizePx = Math.max(qrSizePx, 220);
 
 // Never exceed 28% of template width
+qrSizePx = Math.max(200, qrSizePx);
 qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.28));
-
+  
 const padding = Math.round(tplW * 0.04);
 
 // Generate QR with proper quiet zone
@@ -700,8 +747,8 @@ await sharp(safeTplPath)
     },
     {
       input: qrBuffer,
-      left: Math.max(0, Math.min(tplW - qrSizePx - padding, tplW - qrSizePx)),
-      top: Math.max(0, Math.min(tplH - qrSizePx - padding, tplH - qrSizePx))
+      left: qrLeft,
+      top: qrTop
     }
   ])
   .png({ compressionLevel: 9 })
