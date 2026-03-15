@@ -703,31 +703,33 @@ const qrToken = jwt.sign(
 );
 
 // Better size calculation
-let qrSizePx = Math.round(ev.qrSize * tplW);
+let qrSizePx = Math.round((ev.qrSize || 0.2) * tplW);
 
-qrSizePx = Math.max(qrSizePx, 200); // safe minimum
+qrSizePx = Math.max(qrSizePx, 180);
 qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.28));
 
-let qrLeft = Math.round(ev.qrX * tplW);
-let qrTop = Math.round(ev.qrY * tplH);
+let qrLeft = Math.round(ev.qrX * tplW - qrSizePx / 2);
+let qrTop  = Math.round(ev.qrY * tplH - qrSizePx / 2);
 
-// Clamp after size finalized
+// Clamp inside template
 qrLeft = Math.max(0, Math.min(qrLeft, tplW - qrSizePx));
-qrTop = Math.max(0, Math.min(qrTop, tplH - qrSizePx));
+qrTop  = Math.max(0, Math.min(qrTop, tplH - qrSizePx));
   
 // Generate QR with proper quiet zone
-const qrBuffer = await QRCode.toBuffer(
+const rawQr = await QRCode.toBuffer(
   `${BASE_URL}/verify/${qrToken}`,
   {
     width: qrSizePx,
-    margin: 4,                 // REQUIRED for scanning
-    errorCorrectionLevel: "H", // High reliability
-    color: {
-      dark: "#000000",
-      light: "#FFFFFF"
-    }
+    margin: 2,
+    errorCorrectionLevel: "H"
   }
 );
+
+// Force resize so QR never exceeds template
+const qrBuffer = await sharp(rawQr)
+  .resize(qrSizePx, qrSizePx, { fit: "contain" })
+  .png()
+  .toBuffer();
   
 /* ===== CERTIFICATE FILE ===== */
 
