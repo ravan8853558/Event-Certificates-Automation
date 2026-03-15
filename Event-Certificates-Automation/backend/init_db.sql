@@ -21,8 +21,10 @@ CREATE TABLE IF NOT EXISTS events (
   nameAlign TEXT DEFAULT 'center'
     CHECK(nameAlign IN ('left','center','right')),
 
-  qrSize REAL CHECK(qrSize >= 0 AND qrSize <= 1),
-
+  qrX REAL NOT NULL CHECK(qrX >= 0 AND qrX <= 1),
+  qrY REAL NOT NULL CHECK(qrY >= 0 AND qrY <= 1),
+  qrSize REAL NOT NULL DEFAULT 0.15 CHECK(qrSize >= 0 AND qrSize <= 1),
+  
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 -- ================= RESPONSES TABLE =================
@@ -56,9 +58,11 @@ CREATE TABLE IF NOT EXISTS responses (
 CREATE INDEX IF NOT EXISTS idx_responses_event
 ON responses(event_id);
 
+CREATE INDEX IF NOT EXISTS idx_responses_event_name
+ON responses(event_id, name);
+
 CREATE INDEX IF NOT EXISTS idx_responses_created
 ON responses(created_at);
-
 
 -- ================= BULK JOBS TABLE =================
 CREATE TABLE IF NOT EXISTS bulk_jobs (
