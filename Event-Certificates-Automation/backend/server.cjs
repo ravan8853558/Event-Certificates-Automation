@@ -761,8 +761,8 @@ height="${Math.min(safeBoxH, tplH - 20)}">
 </svg>`;
 
 // Position
-let left = Math.round(ev.nameBoxX * tplW);
-let top  = Math.round(ev.nameBoxY * tplH);
+let left = Math.round(ev.nameBoxX * tplW - safeBoxW / 2);
+let top  = Math.round(ev.nameBoxY * tplH - safeBoxH / 2);
 
 // Clamp inside template
 left = Math.max(0, Math.min(left, tplW - safeBoxW));
