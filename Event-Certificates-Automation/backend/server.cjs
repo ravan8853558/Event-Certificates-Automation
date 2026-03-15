@@ -1083,7 +1083,15 @@ for (let row of rows) {
     continue;
   }
   const name = String(row[col] || "").trim();
-  
+  let email = "";
+
+  const emailKey = Object.keys(row).find(
+    c => c.trim().toLowerCase() === "email"
+  );
+
+  if (emailKey) {
+    email = String(row[emailKey] || "").trim();
+  }
   
   if (!name) continue;
 
@@ -1092,8 +1100,8 @@ for (let row of rows) {
   try {
     certRel = await generateCertificate(
       ev,
-      { name, email: "" },
-      false
+      { name, email },
+      true
     );
   } catch (err) {
 
@@ -1136,6 +1144,7 @@ for (let row of rows) {
           `UPDATE bulk_jobs SET completed = completed + 1 WHERE id = ?`,
           jobId
         );
+        await new Promise(r => setTimeout(r, 300));
       }
 
       continue;
