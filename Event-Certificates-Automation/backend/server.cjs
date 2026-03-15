@@ -1073,7 +1073,9 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
 
     outputSheet.columns = [
       ...headers.map(h => ({ header: h, key: h, width: 20 })),
-      { header: "Certificate Link", key: "cert_link", width: 45 }
+
+      { header: "Certificate Link", key: "cert_link", width: 40 },
+      { header: "Email Status", key: "email_status", width: 20 }
     ];
 
 for (let row of rows) {
@@ -1085,12 +1087,17 @@ for (let row of rows) {
   const name = String(row[col] || "").trim();
   let email = "";
 
-  const emailKey = Object.keys(row).find(
-    c => c.trim().toLowerCase() === "email"
-  );
+  const emailKey = Object.keys(row).find(c => {
+    const key = c.trim().toLowerCase();
+    return key === "email" || key === "email id" || key === "mail";
+  });
 
   if (emailKey) {
     email = String(row[emailKey] || "").trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      email = "";
+    }
   }
   
   if (!name) continue;
@@ -1137,7 +1144,10 @@ for (let row of rows) {
 
         outputSheet.addRow({
           ...safeRow,
-          cert_link: `${BASE_URL}${certRel}`
+          cert_link: {
+            text: "View Certificate",
+            hyperlink: `${BASE_URL}${certRel}`
+          }
         });
 
         await db.run(
@@ -1173,7 +1183,13 @@ for (let row of rows) {
 
   outputSheet.addRow({
     ...safeRow,
-    cert_link: `${BASE_URL}${certRel}`
+
+    cert_link: {
+      text: "View Certificate",
+      hyperlink: `${BASE_URL}${certRel}`
+    },
+
+    email_status: emailStatus
   });
 
   await db.run(
