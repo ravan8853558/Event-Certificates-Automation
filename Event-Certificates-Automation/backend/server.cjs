@@ -674,8 +674,7 @@ const tplH = meta.height;
   );
   
   const maxNameWidth = tplW * 0.8;
-  const finalBoxW = Math.min(dynamicBoxW, maxNameWidth);
-
+  const finalBoxW = Math.min(dynamicBoxW, maxNameWidth, tplW - 20);
   const boxH = Math.ceil(fontSize * 1.6);
 
   /* ===== ALIGNMENT (textbox ke andar) ===== */
@@ -739,12 +738,14 @@ const certFull = path.join(CERT_DIR, certFile);
 /* ===== SAFE POSITION CALCULATION ===== */
 
 // Absolute hard limits
-const safeBoxW = Math.min(finalBoxW, tplW);
-const safeBoxH = Math.min(boxH, tplH);
+const safeBoxW = Math.min(finalBoxW, tplW - 10);
+const safeBoxH = Math.min(boxH, tplH - 10);
 
 // Ensure SVG never exceeds template
 const safeSvg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${safeBoxW}" height="${safeBoxH}">
+<svg xmlns="http://www.w3.org/2000/svg"
+width="${Math.min(safeBoxW, tplW - 20)}"
+height="${Math.min(safeBoxH, tplH - 20)}">
   <text
     x="${textX}"
     y="${safeBoxH / 2}"
