@@ -10,7 +10,7 @@ const multer = require("multer");
 const jwt = require("jsonwebtoken");
 const sharp = require("sharp");
 sharp.cache(false);
-sharp.concurrency(1);
+sharp.concurrency(2);
 sharp.simd(false);
 const QRCode = require("qrcode");
 const bcrypt = require("bcryptjs");
@@ -78,13 +78,20 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
-const submitLimiter = rateLimit({ windowMs: 60 * 1000, max: 5 });
-
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+const submitLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10
+});
 /* ================= DATABASE ================= */
 
 let db;
@@ -169,7 +176,10 @@ app.get("/api/bulk/download/:file", (req, res) => {
 // ================= LOGIN =================
 app.post("/api/admin/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body;
-
+  
+  if (!username || !password) {
+  return res.status(400).json({ error: "Username and password required" });
+  }
   if (username !== ADMIN_USER)
     return res.status(401).json({ error: "Invalid credentials" });
 
@@ -184,7 +194,7 @@ app.post("/api/admin/login", loginLimiter, async (req, res) => {
 const upload = multer({
   dest: TEMP_DIR,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB max
+    fileSize: 5 * 1024 * 1024
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["image/png", "image/jpeg"];
@@ -216,7 +226,12 @@ app.post("/api/upload-template", authMiddleware, upload.single("template"), asyn
     }
 
      await sharp(req.file.path)
-       .resize({ width: 2000, withoutEnlargement: true })
+      .resize({
+        width: 2000,
+        height: 2000,
+        fit: "inside",
+        withoutEnlargement: true
+      })
        .png({ compressionLevel: 9 })
        .toFile(dest);
 
@@ -362,7 +377,6 @@ app.get("/api/events", authMiddleware, async (_, res) => {
 });
 
 /* ================= BULK FILE UPLOAD ================= */
-
 const bulkUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
@@ -374,11 +388,21 @@ const bulkUpload = multer({
       cb(null, unique + ext);
     }
   }),
-  limits: { fileSize: 10 * 1024 * 1024 }
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    if (![".csv", ".xlsx"].includes(ext)) {
+      return cb(new Error("Only CSV or XLSX files allowed"));
+    }
+
+    cb(null, true);
+  }
 });
 
 app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (req, res) => {
   try {
+
     if (!req.file)
       return res.status(400).json({ error: "No file uploaded" });
 
@@ -389,7 +413,7 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
 
     // ================= PARSE CSV =================
     if (ext === ".csv") {
-      const content = fs.readFileSync(filePath);
+      const content = fs.readFileSync(filePath, "utf8");
       rows = parse(content, {
         columns: true,
         skip_empty_lines: true,
@@ -403,10 +427,14 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
       await workbook.xlsx.readFile(filePath);
 
       const sheet = workbook.worksheets[0];
-      if (!sheet)
+      if (!sheet){
+          fs.unlinkSync(filePath);
         return res.status(400).json({ error: "Excel sheet empty" });
+      }
 
-      const headers = sheet.getRow(1).values.slice(1);
+      const headers = sheet.getRow(1).values
+        .filter(v => v !== null && v !== undefined)
+        .map(v => String(v).trim());
 
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
@@ -421,15 +449,20 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
     }
 
     else {
+      fs.unlinkSync(filePath);
       return res.status(400).json({ error: "Only CSV or XLSX allowed" });
     }
 
     // 🔒 Now validate rows AFTER parsing
-    if (!rows.length)
+    if (!rows.length) {
+      fs.unlinkSync(filePath);
       return res.status(400).json({ error: "No data found in file" });
+    }
 
-    if (rows.length > 500)
+    if (rows.length > 500) {
+      fs.unlinkSync(filePath);
       return res.status(400).json({ error: "Maximum 500 rows allowed per bulk" });
+    }
 
     const columns = Object.keys(rows[0]);
 
@@ -441,6 +474,9 @@ app.post("/api/bulk/upload", authMiddleware, bulkUpload.single("file"), async (r
     });
 
   } catch (err) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
     console.error("Bulk upload error:", err);
     res.status(500).json({ error: "Bulk upload failed" });
   }
@@ -586,6 +622,8 @@ function formatNameCase(name) {
     .join(" ");
 }
 
+const templateMetaCache = new Map();
+
 /* ================= CERTIFICATE GENERATION ================= */
 
 async function generateCertificate(ev, data, sendEmail = true) {
@@ -607,15 +645,26 @@ async function generateCertificate(ev, data, sendEmail = true) {
     throw new Error("Template file not found");
   }
 
-  const meta = await sharp(safeTplPath).metadata();
-  const tplW = meta.width;
-  const tplH = meta.height;
+  let meta = templateMetaCache.get(safeTplPath);
+  if (!meta) {
+    meta = await sharp(safeTplPath).metadata();
+    templateMetaCache.set(safeTplPath, meta);
+  }
 
+const tplW = meta.width;
+const tplH = meta.height;
   /* ===== NAME PREP ===== */
 
   const formattedName = formatNameCase(name);
   const normalizedName = formattedName.toLowerCase();
-  const safeName = formattedName.replace(/[<>]/g, "").slice(0,120);
+  const safeName = formattedName
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;")
+    .slice(0,120);
+  
   const fontSize = ev.nameFontSize || 40;
 
   // Dynamic width (text shrink nahi hoga)
@@ -646,24 +695,10 @@ async function generateCertificate(ev, data, sendEmail = true) {
     textX = finalBoxW - fontSize * 0.5;
   }
 
-  const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="${finalBoxW}" height="${boxH}">
-    <text
-      x="${textX}"
-      y="${boxH / 2}"
-      font-family="${ev.nameFontFamily || 'Poppins'}"
-      font-size="${fontSize}"
-      fill="${ev.nameFontColor || '#000000'}"
-      text-anchor="${textAnchor}"
-      dominant-baseline="middle">
-      ${safeName}
-    </text>
-  </svg>`;
-
 /* ===== QR ===== */
 
 const qrToken = jwt.sign(
-  { event: ev.id, name: formattedName },
+  { event: ev.id, name: normalizedName },
   JWT_SECRET,
   { expiresIn: "30d" }
 );
@@ -671,22 +706,16 @@ const qrToken = jwt.sign(
 // Better size calculation
 let qrSizePx = Math.round(ev.qrSize * tplW);
 
+qrSizePx = Math.max(qrSizePx, 200); // safe minimum
+qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.28));
+
 let qrLeft = Math.round(ev.qrX * tplW);
 let qrTop = Math.round(ev.qrY * tplH);
 
-// clamp inside template
+// Clamp after size finalized
 qrLeft = Math.max(0, Math.min(qrLeft, tplW - qrSizePx));
 qrTop = Math.max(0, Math.min(qrTop, tplH - qrSizePx));
   
-// Safe minimum for long JWT
-qrSizePx = Math.max(qrSizePx, 220);
-
-// Never exceed 28% of template width
-qrSizePx = Math.max(200, qrSizePx);
-qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.28));
-  
-const padding = Math.round(tplW * 0.04);
-
 // Generate QR with proper quiet zone
 const qrBuffer = await QRCode.toBuffer(
   `${BASE_URL}/verify/${qrToken}`,
@@ -703,7 +732,8 @@ const qrBuffer = await QRCode.toBuffer(
   
 /* ===== CERTIFICATE FILE ===== */
 
-const certFile = `${Date.now()}-${uuidv4()}.png`;
+const safeFileName = formattedName.replace(/[^\w]/g,"_");
+const certFile = `${safeFileName}-${Date.now()}-${uuidv4()}.png`;
 const certFull = path.join(CERT_DIR, certFile);
   
 /* ===== SAFE POSITION CALCULATION ===== */
@@ -716,12 +746,12 @@ const safeBoxH = Math.min(boxH, tplH);
 const safeSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${safeBoxW}" height="${safeBoxH}">
   <text
-    x="${safeBoxW / 2}"
+    x="${textX}"
     y="${safeBoxH / 2}"
     font-family="${ev.nameFontFamily || 'Poppins'}"
     font-size="${fontSize}"
     fill="${ev.nameFontColor || '#000000'}"
-    text-anchor="middle"
+    text-anchor="${textAnchor}"
     dominant-baseline="middle">
     ${safeName}
   </text>
@@ -734,9 +764,6 @@ let top  = Math.round(ev.nameBoxY * tplH - safeBoxH / 2);
 // Clamp inside template
 left = Math.max(0, Math.min(left, tplW - safeBoxW));
 top  = Math.max(0, Math.min(top, tplH - safeBoxH));
-
-// Clamp QR size strictly
-qrSizePx = Math.min(qrSizePx, tplW, tplH);
 
 await sharp(safeTplPath)
   .composite([
@@ -863,13 +890,17 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 
   if (!name || name.length > 100)
      return res.status(400).send("Invalid name");
-
+  
+  if (req.body.mobile && !/^[0-9]{10,15}$/.test(req.body.mobile)) {
+    return res.status(400).send("Invalid mobile number");
+  }
+  
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
      return res.status(400).send("Invalid email");
 
   const ev = await db.get(
     "SELECT * FROM events WHERE id=?",
-    req.params.eventId
+    parseInt(req.params.eventId)
   );
 
   if (!ev)
@@ -923,7 +954,11 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     if (!fs.existsSync(safeTempPath))
       return res.status(400).json({ error: "Uploaded file not found" });
 
-    const ev = await db.get("SELECT * FROM events WHERE id=?", parseInt(eventId));
+    const eventIdInt = parseInt(eventId);
+    const ev = await db.get(
+      "SELECT * FROM events WHERE id=?",
+      eventIdInt
+    );
     if (!ev)
       return res.status(404).json({ error: "Event not found" });
 
@@ -931,14 +966,16 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     let rows = [];
 
     if (ext === ".csv") {
-      const content = fs.readFileSync(safeTempPath);
+      const content = fs.readFileSync(safeTempPath, "utf8");
       rows = parse(content, { columns: true, skip_empty_lines: true, trim: true });
     }
     else if (ext === ".xlsx") {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(safeTempPath);
       const sheet = workbook.worksheets[0];
-      const headers = sheet.getRow(1).values.slice(1);
+      const headers = sheet.getRow(1).values
+        .filter(v => v !== null && v !== undefined)
+        .map(v => String(v).trim());
 
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
@@ -950,16 +987,22 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
       });
     }
     else {
+      fs.unlinkSync(safeTempPath);
       return res.status(400).json({ error: "Unsupported file type" });
     }
 
-    if (!rows.length)
+    if (!rows.length) {
+      fs.unlinkSync(safeTempPath);
       return res.status(400).json({ error: "No data found" });
-
-    if (rows.length > 500)
+    }
+    
+    if (rows.length > 500) {
+      fs.unlinkSync(safeTempPath);
       return res.status(400).json({ error: "Maximum 500 rows allowed" });
+    }
 
-    if (!rows[0].hasOwnProperty(nameColumn)) {
+    const normalizedColumns = Object.keys(rows[0]).map(c => c.trim());
+    if (!normalizedColumns.includes(nameColumn.trim())) {
       return res.status(400).json({ error: "Invalid name column selected" });
     }
 
@@ -969,7 +1012,7 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
       `INSERT INTO bulk_jobs (id, event_id, total)
        VALUES (?, ?, ?)`,
       jobId,
-      eventId,
+      eventIdInt,
       rows.length
     );
 
@@ -978,6 +1021,7 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
     /* ===== BACKGROUND PROCESS ===== */
 
 (async () => {
+  let tempExcelPath;
   try {
 
     const zipName = `bulk-${Date.now()}.zip`;
@@ -1000,7 +1044,13 @@ app.post("/api/bulk/generate", authMiddleware, bulkLimiter, async (req, res) => 
 
 for (let row of rows) {
 
-  const name = String(row[nameColumn] || "").trim();
+  const col = Object.keys(row).find(c => c.trim() === nameColumn.trim());
+  if (!col) {
+    continue;
+  }
+  const name = String(row[col] || "").trim();
+  
+  
   if (!name) continue;
 
   let certRel;
@@ -1090,7 +1140,7 @@ for (let row of rows) {
 }
     
     // Create Excel file
-    const tempExcelPath = path.join(
+    tempExcelPath = path.join(
       TEMP_DIR,
       `bulk-${Date.now()}.xlsx`
     );
@@ -1129,13 +1179,17 @@ for (let row of rows) {
     }
 
   } catch (err) {
-
     console.error("Bulk background error:", err);
-
+    if (fs.existsSync(safeTempPath)) {
+      fs.unlinkSync(safeTempPath);
+    }
+    if (typeof tempExcelPath !== "undefined" && fs.existsSync(tempExcelPath)) {
+      fs.unlinkSync(tempExcelPath);
+    }
     await db.run(
       `UPDATE bulk_jobs 
-       SET status = 'failed'
-       WHERE id = ?`,
+      SET status = 'failed'
+      WHERE id = ?`,
       jobId
     );
   }
@@ -1151,7 +1205,7 @@ app.get("/verify/:token", async (req, res) => {
   try {
     const data = jwt.verify(req.params.token, JWT_SECRET);
 
-    const eventId = data.event;
+    const eventId = parseInt(data.event);
     const participantName = String(data.name).trim().toLowerCase();
     
     const ev = await db.get(
@@ -1160,7 +1214,7 @@ app.get("/verify/:token", async (req, res) => {
     );
 
     const rec = await db.get(
-      "SELECT * FROM responses WHERE event_id = ? AND TRIM(name) = ?",
+      "SELECT * FROM responses WHERE event_id = ? AND name = ?",
       eventId,
       participantName
     );
@@ -1345,10 +1399,10 @@ app.get("/api/download-excel/:eventId", authMiddleware, async (req, res) => {
 
 
 /* ========= DELETE SINGLE EVENT ========= */
-
 app.delete("/api/events/:id", authMiddleware, async (req, res) => {
   try {
-    const eventId = req.params.id;
+
+    const eventId = parseInt(req.params.id);
 
     const certs = await db.all(
       "SELECT cert_path FROM responses WHERE event_id=?",
@@ -1356,12 +1410,24 @@ app.delete("/api/events/:id", authMiddleware, async (req, res) => {
     );
 
     for (const c of certs) {
-      const fullPath = path.join(__dirname, c.cert_path.replace(/^\//, ""));
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-      }
+      const fullPath = path.join(__dirname, c.cert_path.replace(/^\//,""));
+      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
     }
 
+    const event = await db.get(
+      "SELECT templatePath FROM events WHERE id=?",
+      eventId
+    );
+
+    if (event) {
+      const templateFull = path.join(
+        __dirname,
+        event.templatePath.replace(/^\//,"")
+      );
+      if (fs.existsSync(templateFull)) fs.unlinkSync(templateFull);
+    }
+
+    // 🔥 THIS LINE WAS MISSING
     await db.run("DELETE FROM events WHERE id=?", eventId);
 
     res.json({ success: true });
@@ -1380,17 +1446,33 @@ app.post("/api/delete-multiple-events", authMiddleware, async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0)
       return res.status(400).json({ error: "No IDs provided" });
 
-    for (const eventId of ids) {
+    for (const eventId of ids.map(Number)) {
+
+      const event = await db.get(
+        "SELECT templatePath FROM events WHERE id=?",
+        eventId
+      );
+
+      if (event) {
+        const templateFull = path.join(
+          __dirname,
+          event.templatePath.replace(/^\//,"")
+        );
+        if (fs.existsSync(templateFull)) fs.unlinkSync(templateFull);
+      }
+
       const certs = await db.all(
         "SELECT cert_path FROM responses WHERE event_id=?",
         eventId
       );
 
       for (const c of certs) {
-        const fullPath = path.join(__dirname, c.cert_path.replace(/^\//, ""));
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
-        }
+        const fullPath = path.join(
+          __dirname,
+          c.cert_path.replace(/^\//,"")
+        );
+
+        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
       }
     }
 
@@ -1416,7 +1498,13 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
     if (!req.query.ids)
       return res.status(400).json({ error: "No IDs provided" });
 
-    const ids = req.query.ids.split(",");
+    const ids = req.query.ids
+      .split(",")
+      .map(id => parseInt(id))
+      .filter(id => !isNaN(id));
+    if (!ids.length) {
+      return res.status(400).json({ error: "Invalid IDs" });
+    }
     const archive = archiver("zip", { zlib: { level: 9 } });
     archive.on("error", (err) => {
       console.error("Archive error:", err);
@@ -1439,7 +1527,12 @@ app.get("/api/download-multiple-excel", authMiddleware, async (req, res) => {
       let csv = "Name,Email,Mobile,Dept,Year,Enroll,Certificate\n";
 
       responses.forEach(r => {
-        csv += `"${formatNameCase(r.name)}","${r.email}","${r.mobile}","${r.dept}","${r.year}","${r.enroll}","${BASE_URL}${r.cert_path}"\n`;
+        const safe = (v) => {
+          v = String(v || "");
+          if (v.startsWith("=")) return "'" + v;
+          return v;
+        };
+        csv += `"${safe(formatNameCase(r.name))}","${safe(r.email)}","${safe(r.mobile)}","${safe(r.dept)}","${safe(r.year)}","${safe(r.enroll)}","${BASE_URL}${r.cert_path}"\n`;
       });
 
       const safeName = event.name.replace(/[^\w]/g, "_");
@@ -1498,7 +1591,7 @@ app.get("/api/bulk/history", authMiddleware, async (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Internal Server Error" });
+  res.status(err.status || 500).json({ error: err.message || "Internal Server Error" });
 });
 
 process.on("SIGINT", shutdown);
