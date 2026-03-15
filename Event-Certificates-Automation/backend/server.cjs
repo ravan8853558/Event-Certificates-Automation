@@ -819,73 +819,107 @@ const certRel = `/uploads/certs/${certFile}`;
 
   /* ===== EMAIL SECTION ===== */
 
-  if (sendEmail && email) {
-    try {
+if (sendEmail && email) {
+  try {
 
-      if (!process.env.RESEND_API_KEY || !process.env.FROM_EMAIL) {
-        throw new Error("Email service not configured");
-      }
+    if (!process.env.RESEND_API_KEY || !process.env.FROM_EMAIL) {
+      throw new Error("Email service not configured");
+    }
 
-      const certBuffer = fs.readFileSync(certFull);
+    const certBuffer = fs.readFileSync(certFull);
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: process.env.FROM_EMAIL,
-          to: email,
-          subject: `🎓 Certificate - ${ev.name}`,
-          html: `<p>Dear <b>${safeName}</b>,</p>
-                 <p>You successfully participated in <b>${ev.name}</b>.</p>`,
-          attachments: [{
-            filename: `${safeName.replace(/[^\w]/g,"_")}.png`,
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: process.env.FROM_EMAIL,
+        to: email,
+        subject: `🎓 Your Certificate – ${ev.name}`,
+
+        html: `
+<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333">
+
+  <h2 style="color:#2563eb;margin-bottom:10px">
+    🎓 Certificate of Participation
+  </h2>
+
+  <p>Dear <b>${safeName}</b>,</p>
+
+  <p>
+    Congratulations! You have successfully participated in the event:
+  </p>
+
+  <p style="font-size:16px;margin:10px 0">
+    <b>${ev.name}</b>
+  </p>
+
+  <p>
+    Your participation certificate is attached to this email.
+  </p>
+
+  <p>
+    You can verify your certificate anytime using the QR code printed on it.
+  </p>
+
+  <br>
+
+  <p>
+    Best Regards,<br>
+    <b>Team ${escapeHTML(ev.orgBy)}</b>
+  </p>
+
+</div>
+`,
+
+        attachments: [
+          {
+            filename: `${safeName.replace(/[^\w]/g, "_")}.png`,
             content: certBuffer.toString("base64")
-          }]
-        }),
-        signal: controller.signal
-      });
+          }
+        ]
+      }),
 
-      clearTimeout(timeout);
+      signal: controller.signal
+    });
 
-      let responseData;
-      try {
-        responseData = await response.json();
-      } catch {
-        responseData = null;
-      }
+    clearTimeout(timeout);
 
-      if (!response.ok) {
-        throw new Error(
-          `Email API Error: ${response.status} - ${JSON.stringify(responseData)}`
-        );
-      }
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch {
+      responseData = null;
+    }
 
-      await db.run(
-        `UPDATE responses SET email_status=? WHERE cert_path=?`,
-        "sent",
-        certRel
-      );
-
-    } catch (err) {
-
-      await db.run(
-        `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
-        "failed",
-        err.message.slice(0, 500),
-        certRel
+    if (!response.ok) {
+      throw new Error(
+        `Email API Error: ${response.status} - ${JSON.stringify(responseData)}`
       );
     }
+
+    await db.run(
+      `UPDATE responses SET email_status=? WHERE cert_path=?`,
+      "sent",
+      certRel
+    );
+
+  } catch (err) {
+
+    await db.run(
+      `UPDATE responses SET email_status=?, email_error=? WHERE cert_path=?`,
+      "failed",
+      err.message.slice(0, 500),
+      certRel
+    );
   }
-
-  return certRel;
 }
-
+  
 // ================= SUBMIT =================
 app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 
