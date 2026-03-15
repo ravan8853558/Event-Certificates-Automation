@@ -926,13 +926,8 @@ app.post("/api/submit/:eventId", submitLimiter, async (req, res) => {
 `);
 
   } catch (err) {
-
-    if (err.message.includes("already generated")) {
-      return res.status(400).send("Certificate already generated for this name");
-    }
-
-    console.error(err);
-    return res.status(500).send("Certificate generation failed");
+    console.error("CERT ERROR:", err);
+    return res.status(500).send(err.message);
   }
 });
 
