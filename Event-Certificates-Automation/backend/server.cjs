@@ -708,8 +708,8 @@ let qrSizePx = Math.round((ev.qrSize || 0.2) * tplW);
 qrSizePx = Math.max(qrSizePx, 180);
 qrSizePx = Math.min(qrSizePx, Math.floor(tplW * 0.28));
 
-let qrLeft = Math.round(ev.qrX * tplW - qrSizePx / 2);
-let qrTop  = Math.round(ev.qrY * tplH - qrSizePx / 2);
+let qrLeft = Math.round(ev.qrX * tplW);
+let qrTop  = Math.round(ev.qrY * tplH);
 
 // Clamp inside template
 qrLeft = Math.max(0, Math.min(qrLeft, tplW - qrSizePx));
@@ -761,8 +761,8 @@ height="${Math.min(safeBoxH, tplH - 20)}">
 </svg>`;
 
 // Position
-let left = Math.round(ev.nameBoxX * tplW - safeBoxW / 2);
-let top  = Math.round(ev.nameBoxY * tplH - safeBoxH / 2);
+let left = Math.round(ev.nameBoxX * tplW);
+let top  = Math.round(ev.nameBoxY * tplH);
 
 // Clamp inside template
 left = Math.max(0, Math.min(left, tplW - safeBoxW));
@@ -1141,7 +1141,11 @@ for (let row of rows) {
           if (val.startsWith("=")) val = "'" + val;
           safeRow[key] = val;
         }
-
+        const emailStatusRow = await db.get(
+          "SELECT email_status FROM responses WHERE cert_path=?",
+          certRel
+        );
+        const emailStatus = emailStatusRow ? emailStatusRow.email_status : "";
         outputSheet.addRow({
           ...safeRow,
           cert_link: {
@@ -1180,7 +1184,13 @@ for (let row of rows) {
     if (val.startsWith("=")) val = "'" + val;
     safeRow[key] = val;
   }
+  
+  const emailStatusRow = await db.get(
+    "SELECT email_status FROM responses WHERE cert_path=?",
+     certRel
+  );
 
+  const emailStatus = emailStatusRow ? emailStatusRow.email_status : "";
   outputSheet.addRow({
     ...safeRow,
 
