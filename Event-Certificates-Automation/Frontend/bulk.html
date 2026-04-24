@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk Upload — CAS Admin</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+<style>
+/* =====================================================
+   CSS VARIABLES — Dark / Light (identical to events & dashboard)
+===================================================== */
+:root,
+[data-theme="dark"] {
+  --bg-grad:          radial-gradient(ellipse 80% 70% at 50% 20%, #0c2a5a 0%, #050d1a 70%);
+  --blob1:            #1a4faa;
+  --blob2:            #6c63ff;
+  --navbar-bg:        rgba(5,13,26,0.88);
+  --navbar-border:    rgba(58,180,242,0.13);
+  --card-bg:          rgba(8,22,46,0.72);
+  --card-border:      rgba(80,160,255,0.14);
+  --card-shadow:      0 0 0 1px rgba(60,180,255,0.04), 0 20px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+  --panel-bg:         rgba(10,26,56,0.65);
+  --panel-hover:      rgba(14,32,68,0.88);
+  --input-bg:         rgba(10,26,56,0.65);
+  --input-bg-focus:   rgba(12,34,76,0.88);
+  --input-border:     rgba(80,160,255,0.18);
+  --grid-line:        rgba(60,140,255,0.035);
+  --text-main:        #e4eeff;
+  --text-sub:         #7aa4cc;
+  --text-hint:        #4a7aa0;
+  --accent:           #3ab4f2;
+  --accent-glow:      rgba(58,180,242,0.18);
+  --modal-bg:         #08111f;
+  --logout-color:     #f87171;
+  --logout-border:    rgba(239,68,68,0.4);
+  --logout-hover:     rgba(239,68,68,0.1);
+  --toggle-bg:        rgba(8,22,46,0.72);
+  --toggle-border:    rgba(80,160,255,0.25);
+  --toggle-color:     #7aa4cc;
+  --divider:          rgba(80,160,255,0.1);
+  --chip-bg:          rgba(58,180,242,0.1);
+  --chip-border:      rgba(58,180,242,0.22);
+  --select-bg:        #0e1e36;
+  --step-done-bg:     rgba(34,197,94,0.1);
+  --step-done-border: rgba(34,197,94,0.28);
+  --preview-bg:       rgba(34,197,94,0.06);
+  --preview-border:   rgba(34,197,94,0.2);
+  --progress-track:   rgba(58,180,242,0.12);
+}
+
+[data-theme="light"] {
+  --bg-grad:          radial-gradient(ellipse 80% 70% at 50% 20%, #c0d8f8 0%, #dde8f7 70%);
+  --blob1:            #90bef5;
+  --blob2:            #b4aeff;
+  --navbar-bg:        rgba(255,255,255,0.88);
+  --navbar-border:    rgba(60,130,220,0.18);
+  --card-bg:          rgba(255,255,255,0.82);
+  --card-border:      rgba(60,130,220,0.18);
+  --card-shadow:      0 4px 32px rgba(60,100,200,0.1), inset 0 1px 0 rgba(255,255,255,0.9);
+  --panel-bg:         rgba(230,243,255,0.75);
+  --panel-hover:      rgba(210,234,255,0.95);
+  --input-bg:         rgba(225,238,255,0.7);
+  --input-bg-focus:   rgba(210,230,255,0.9);
+  --input-border:     rgba(60,130,220,0.25);
+  --grid-line:        rgba(60,130,220,0.06);
+  --text-main:        #0e1e38;
+  --text-sub:         #3a6090;
+  --text-hint:        #5580a8;
+  --accent:           #1a72c8;
+  --accent-glow:      rgba(26,114,200,0.12);
+  --modal-bg:         #f0f7ff;
+  --logout-color:     #dc2626;
+  --logout-border:    rgba(220,38,38,0.35);
+  --logout-hover:     rgba(220,38,38,0.08);
+  --toggle-bg:        rgba(255,255,255,0.85);
+  --toggle-border:    rgba(60,130,220,0.3);
+  --toggle-color:     #3a6090;
+  --divider:          rgba(60,130,220,0.12);
+  --chip-bg:          rgba(26,114,200,0.08);
+  --chip-border:      rgba(26,114,200,0.2);
+  --select-bg:        #e8f2ff;
+  --step-done-bg:     rgba(22,163,74,0.08);
+  --step-done-border: rgba(22,163,74,0.22);
+  --preview-bg:       rgba(22,163,74,0.06);
+  --preview-border:   rgba(22,163,74,0.2);
+  --progress-track:   rgba(26,114,200,0.12);
+}
+
+/* =====================================================
+   BASE
+===================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background: var(--bg-grad); background-attachment: fixed;
+  color: var(--text-main); line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh; overflow-x: hidden;
+  transition: background .4s, color .3s;
+}
+
+.hidden { display: none !important; }
+
+/* blobs */
+.blob {
+  position: fixed; border-radius: 50%;
+  filter: blur(90px); opacity: 0.18; pointer-events: none; z-index: 0;
+  animation: blobDrift 14s ease-in-out infinite alternate;
+}
+.blob-1 { width:600px; height:600px; background:var(--blob1); top:-160px; left:-140px; }
+.blob-2 { width:380px; height:380px; background:var(--blob2); bottom:-80px; right:-80px; animation-delay:-6s; animation-duration:10s; }
+@keyframes blobDrift {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(30px,20px) scale(1.07); }
+}
+
+.page-grid-overlay {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* =====================================================
+   NAVBAR
+===================================================== */
+.navbar {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 52px; height: 64px;
+  background: var(--navbar-bg);
+  backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid var(--navbar-border);
+  transition: background .4s, border-color .3s;
+}
+
+.logo {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+  background: linear-gradient(135deg, var(--text-main) 30%, var(--accent) 80%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a {
+  font-size: 13px; color: var(--text-sub); text-decoration: none;
+  font-weight: 500; letter-spacing: .04em;
+  position: relative; padding-bottom: 3px; transition: color .25s;
+}
+.nav-links a::after {
+  content: ''; position: absolute; bottom: -3px; left: 0;
+  width: 0; height: 1.5px; background: var(--accent);
+  border-radius: 2px; transition: width .28s ease;
+}
+.nav-links a:hover, .nav-links a.active { color: var(--accent); }
+.nav-links a:hover::after, .nav-links a.active::after { width: 100%; }
+
+.theme-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border-radius: 40px;
+  border: 1px solid var(--toggle-border);
+  background: var(--toggle-bg); backdrop-filter: blur(12px);
+  color: var(--toggle-color);
+  font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .06em;
+  cursor: pointer; transition: all .3s ease; white-space: nowrap;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); transform: none; }
+.theme-toggle svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+.btn-logout {
+  background: transparent; border: 1px solid var(--logout-border); color: var(--logout-color);
+  font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 8px; letter-spacing: .05em;
+  cursor: pointer; font-family: 'Poppins', sans-serif; transition: all .25s ease;
+}
+.btn-logout:hover { background: var(--logout-hover); border-color: #ef4444; color: #ef4444; transform: translateY(-1px); }
+
+.menu-toggle { display: none; background: none; border: none; color: var(--text-main); font-size: 26px; cursor: pointer; }
+
+/* =====================================================
+   LAYOUT
+===================================================== */
+.container {
+  position: relative; z-index: 1;
+  max-width: 860px; margin: 0 auto;
+  padding: 40px 52px;
+}
+
+/* =====================================================
+   MAIN SECTION CARD
+===================================================== */
+.section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+  backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: var(--card-shadow);
+  padding: 40px 44px;
+  animation: sectionUp .65s cubic-bezier(0.22,1,0.36,1) both;
+  transition: background .4s, border-color .3s, box-shadow .3s;
+}
+@keyframes sectionUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.section h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 6px;
+  display: flex; align-items: center; gap: 10px;
+  transition: color .3s;
+}
+.section h2::before {
+  content: ''; display: inline-block;
+  width: 3px; height: 14px;
+  background: linear-gradient(180deg, var(--accent), #5b6ef5);
+  border-radius: 3px; flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(58,180,242,0.5);
+}
+
+.subtitle {
+  font-size: 13px; color: var(--text-hint);
+  letter-spacing: .02em; margin-bottom: 36px;
+  padding-left: 22px;
+  opacity: 1;
+}
+
+/* =====================================================
+   STEP PIPELINE INDICATOR
+===================================================== */
+.steps-pipeline {
+  display: flex; align-items: center;
+  gap: 0; margin-bottom: 36px;
+}
+
+.step-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  flex: 1; position: relative;
+}
+
+/* connecting line between steps */
+.step-item:not(:last-child)::after {
+  content: '';
+  position: absolute; top: 16px; left: calc(50% + 16px);
+  width: calc(100% - 32px); height: 1.5px;
+  background: var(--divider);
+  transition: background .4s;
+}
+.step-item.done:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--accent), rgba(58,180,242,0.3));
+}
+
+.step-circle {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1.5px solid var(--card-border);
+  background: var(--panel-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--text-hint);
+  transition: all .3s ease; flex-shrink: 0;
+  position: relative; z-index: 1;
+}
+.step-item.active .step-circle {
+  border-color: var(--accent);
+  background: var(--chip-bg);
+  color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+.step-item.done .step-circle {
+  border-color: #22c55e;
+  background: rgba(34,197,94,0.12);
+  color: #22c55e;
+}
+
+.step-label {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-hint);
+  transition: color .3s; text-align: center;
+}
+.step-item.active .step-label { color: var(--accent); }
+.step-item.done  .step-label  { color: #22c55e; }
+
+/* =====================================================
+   FORM ELEMENTS
+===================================================== */
+.form-group { display: flex; flex-direction: column; margin-bottom: 20px; }
+
+.form-group label, .mapping-section label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-sub);
+  margin-bottom: 8px; transition: color .3s;
+}
+
+select, input[type="text"] {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  color: var(--text-main);
+  font-family: 'Poppins', sans-serif; font-size: 14px; padding: 12px 16px;
+  transition: border-color .25s, box-shadow .25s, background .3s;
+  outline: none;
+}
+select { background-color: var(--select-bg) !important; }
+select option { background-color: var(--select-bg); color: var(--text-main); }
+
+select:focus, input[type="text"]:focus {
+  border-color: var(--accent);
+  background: var(--input-bg-focus) !important;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* =====================================================
+   EVENT PREVIEW CARD
+===================================================== */
+.event-preview {
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: var(--preview-bg);
+  border: 1px solid var(--preview-border);
+  animation: fadeUp .35s ease both;
+}
+
+.event-preview p {
+  font-size: 13px; color: var(--text-sub); margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.event-preview p:last-child { margin-bottom: 0; }
+.event-preview strong { color: var(--text-main); font-weight: 600; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =====================================================
+   UPLOAD AREA
+===================================================== */
+.upload-area {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.file-box {
+  flex: 1; padding: 14px 18px; border-radius: 14px;
+  background: var(--panel-bg);
+  border: 1.5px dashed var(--input-border);
+  color: var(--text-sub); font-size: 14px;
+  cursor: pointer; transition: all .25s ease;
+  display: flex; align-items: center; gap: 8px;
+}
+.file-box:hover { border-color: var(--accent); background: var(--panel-hover); color: var(--text-main); }
+.file-box input { display: none; }
+
+/* =====================================================
+   DIVIDER
+===================================================== */
+.step-divider {
+  width: 100%; height: 1px;
+  background: var(--divider);
+  margin: 28px 0;
+  border: none;
+}
+
+/* =====================================================
+   MAPPING SECTION (step 3)
+===================================================== */
+.mapping-section {
+  padding: 24px 26px;
+  background: var(--panel-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  margin-bottom: 20px;
+  animation: fadeUp .35s ease both;
+  transition: background .4s, border-color .3s;
+}
+
+.mapping-section h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 16px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--divider);
+  display: flex; align-items: center; gap: 8px;
+}
+.mapping-section h3::before {
+  content: ''; display: inline-block;
+  width: 3px; height: 12px;
+  background: linear-gradient(180deg, var(--accent), #5b6ef5);
+  border-radius: 3px; box-shadow: 0 0 6px rgba(58,180,242,0.4);
+}
+
+.mapping-section select { margin-bottom: 16px; width: 100%; display: block; }
+
+/* =====================================================
+   DOWNLOAD SECTION (step 4)
+===================================================== */
+.download-section {
+  padding: 24px 26px;
+  background: var(--step-done-bg);
+  border: 1px solid var(--step-done-border);
+  border-radius: 16px;
+  margin-bottom: 20px;
+  animation: fadeUp .4s ease both;
+}
+
+.download-section-label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: #22c55e;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 7px;
+}
+.download-section-label svg { flex-shrink: 0; }
+
+/* =====================================================
+   PROGRESS BAR (shown during generation)
+===================================================== */
+.progress-container {
+  margin-bottom: 16px; display: none;
+}
+.progress-container.visible { display: block; }
+.progress-label-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 7px;
+}
+.progress-label-row span {
+  font-size: 11.5px; color: var(--text-sub); font-weight: 500;
+}
+.progress-label-row .pct { color: var(--accent); font-weight: 700; }
+
+.progress-track {
+  width: 100%; height: 5px;
+  background: var(--progress-track);
+  border-radius: 10px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #5b6ef5, #3ab4f2);
+  border-radius: 10px;
+  box-shadow: 0 0 8px rgba(58,180,242,0.45);
+  transition: width .4s ease;
+}
+
+/* =====================================================
+   BUTTONS
+===================================================== */
+button { font-family: 'Poppins', sans-serif; cursor: pointer; border: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff;
+  border-radius: 12px; font-size: 13px; font-weight: 600; letter-spacing: .06em;
+  padding: 13px 24px; position: relative; overflow: hidden;
+  box-shadow: 0 4px 18px rgba(59,130,246,0.3);
+  transition: transform .25s, box-shadow .25s;
+}
+.btn-primary::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.13), transparent 70%);
+  transform: translateX(-100%); transition: transform .55s ease;
+}
+.btn-primary:hover::before { transform: translateX(100%); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(59,130,246,0.45); }
+
+.btn-success {
+  background: linear-gradient(90deg, #5b6ef5, #3ab4f2); color: #fff;
+  border-radius: 12px; font-size: 13px; font-weight: 600; letter-spacing: .06em;
+  padding: 13px 24px; position: relative; overflow: hidden;
+  box-shadow: 0 4px 18px rgba(58,180,242,0.28);
+  transition: transform .25s, box-shadow .25s;
+}
+.btn-success::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.13), transparent 70%);
+  transform: translateX(-100%); transition: transform .55s ease;
+}
+.btn-success:hover::before { transform: translateX(100%); }
+.btn-success:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(58,180,242,0.42); }
+
+.btn-download-zip {
+  width: 100%;
+  background: linear-gradient(90deg, #16a34a, #22c55e); color: #fff;
+  border-radius: 13px; font-family: 'Orbitron', sans-serif;
+  font-size: 11px; font-weight: 700; letter-spacing: .2em;
+  padding: 17px; position: relative; overflow: hidden;
+  box-shadow: 0 4px 24px rgba(34,197,94,0.28);
+  transition: transform .25s, box-shadow .25s;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.btn-download-zip::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.14), transparent 70%);
+  transform: translateX(-100%); transition: transform .55s ease;
+}
+.btn-download-zip:hover::before { transform: translateX(100%); }
+.btn-download-zip:hover { transform: translateY(-2px); box-shadow: 0 8px 36px rgba(34,197,94,0.44); }
+
+.full { width: 100%; }
+
+/* status */
+#bulkStatus { font-size: 13px; margin-top: 16px; letter-spacing: .02em; transition: color .3s; }
+.status.success, #bulkStatus.success { color: #22c55e; }
+.status.error,   #bulkStatus.error   { color: #ef4444; }
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
+@media (max-width: 768px) {
+  .navbar { padding: 0 24px; }
+  .menu-toggle { display: block; }
+  .nav-links {
+    display: none; position: absolute;
+    top: 64px; right: 0; left: 0;
+    flex-direction: column; gap: 0;
+    background: var(--navbar-bg); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--navbar-border); padding: 16px 24px;
+  }
+  .nav-links.active { display: flex; }
+  .nav-links a, .nav-links button { padding: 10px 0; }
+  .container { padding: 24px 20px; }
+  .section { padding: 28px 22px; }
+  .upload-area { flex-direction: column; }
+  .steps-pipeline { gap: 4px; }
+  .step-label { font-size: 9px; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="page-grid-overlay"></div>
+
+<!-- ======================== NAVBAR ======================== -->
+<nav class="navbar">
+  <div class="logo">CAS · Admin</div>
+
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <div class="nav-links" id="navLinks">
+
+    <a href="dashboard.html">Create Event</a>
+    <a href="events.html">Manage Events</a>
+    <a href="bulk.html" class="active">Bulk Upload</a>
+    <a href="download.html">Download App</a>
+
+    <button class="theme-toggle" id="themeToggle" type="button">
+      <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </svg>
+      <span id="themeLabel">Light</span>
+    </button>
+
+    <button class="btn-logout" type="button">Logout</button>
+  </div>
+</nav>
+
+<!-- ======================== MAIN ======================== -->
+<main class="container">
+  <section class="section highlight">
+
+    <!-- Heading -->
+    <h2>Bulk Certificate Generation</h2>
+    <p class="subtitle">Upload CSV / Excel → Map Name Column → Generate → Download ZIP</p>
+
+    <!-- Step pipeline indicator -->
+    <div class="steps-pipeline">
+      <div class="step-item active" id="stepItem1">
+        <div class="step-circle" id="stepCircle1">1</div>
+        <span class="step-label">Select Event</span>
+      </div>
+      <div class="step-item" id="stepItem2">
+        <div class="step-circle" id="stepCircle2">2</div>
+        <span class="step-label">Upload File</span>
+      </div>
+      <div class="step-item" id="stepItem3">
+        <div class="step-circle" id="stepCircle3">3</div>
+        <span class="step-label">Map Column</span>
+      </div>
+      <div class="step-item" id="stepItem4">
+        <div class="step-circle" id="stepCircle4">4</div>
+        <span class="step-label">Download</span>
+      </div>
+    </div>
+
+    <!-- ===== STEP 1 — Select Event ===== -->
+    <div class="form-group">
+      <label for="eventSelect">Select Event</label>
+      <select id="eventSelect"></select>
+      <div id="eventInfoBox" class="event-info" style="font-size:12px;color:var(--text-hint);margin-top:8px;"></div>
+    </div>
+
+    <!-- Event preview -->
+    <div id="eventPreview" class="event-preview hidden">
+      <p>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <strong>Date:</strong> <span id="previewEventDate"></span>
+      </p>
+      <p>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <strong>Organizer:</strong> <span id="previewEventOrg"></span>
+      </p>
+    </div>
+
+    <hr class="step-divider">
+
+    <!-- ===== STEP 2 — Upload File ===== -->
+    <div class="form-group" style="margin-bottom:0">
+      <label>Upload Participant File</label>
+    </div>
+
+    <div class="upload-area">
+      <label for="bulkFile" class="file-box" id="bulkFileLabel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.6">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <span id="bulkFileText">Select CSV or Excel File</span>
+        <input id="bulkFile" type="file" accept=".csv,.xlsx">
+      </label>
+
+      <button id="bulkUploadBtn" class="btn-primary" type="button">
+        Upload File
+      </button>
+    </div>
+
+    <hr class="step-divider">
+
+    <!-- ===== STEP 3 — Map Column ===== -->
+    <div id="columnMappingSection" class="mapping-section hidden">
+      <h3>Map Participant Name Column</h3>
+
+      <label for="nameColumnSelect">Name Column</label>
+      <select id="nameColumnSelect"></select>
+
+      <!-- progress bar -->
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-label-row">
+          <span>Generating certificates…</span>
+          <span class="pct" id="progressPct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <button id="generateBulkBtn" class="btn-success full" type="button">
+        Generate Certificates
+      </button>
+    </div>
+
+    <!-- ===== STEP 4 — Download ===== -->
+    <div id="bulkDownloadSection" class="download-section hidden">
+      <div class="download-section-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Certificates ready — download below
+      </div>
+
+      <button id="downloadZipBtn" class="btn-download-zip" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download Certificates ZIP
+      </button>
+    </div>
+
+    <!-- Status message -->
+    <div id="bulkStatus" class="status"></div>
+
+  </section>
+</main>
+
+<script src="script.js"></script>
+
+<script>
+/* ── THEME TOGGLE ── */
+const root    = document.documentElement;
+const toggle  = document.getElementById('themeToggle');
+const label   = document.getElementById('themeLabel');
+const iconSun = document.getElementById('iconSun');
+
+const MOON_PATH = `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>`;
+const SUN_PATH  = `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`;
+
+let dark = true;
+if (localStorage.getItem('cas-theme') === 'light') { dark = false; applyTheme(); }
+
+toggle.addEventListener('click', () => {
+  dark = !dark; applyTheme();
+  localStorage.setItem('cas-theme', dark ? 'dark' : 'light');
+});
+
+function applyTheme() {
+  root.setAttribute('data-theme', dark ? 'dark' : 'light');
+  label.textContent = dark ? 'Light' : 'Dark';
+  iconSun.innerHTML = dark ? MOON_PATH : SUN_PATH;
+}
+
+/* ── STEP PIPELINE VISUAL UPDATER ── */
+// Call stepDone(n) to mark step n as complete and activate step n+1
+// This is called by the progress watcher below, but can also be called
+// by external logic if needed.
+function stepActivate(n) {
+  for (let i = 1; i <= 4; i++) {
+    const item   = document.getElementById('stepItem'   + i);
+    const circle = document.getElementById('stepCircle' + i);
+    if (!item) continue;
+    item.classList.remove('active', 'done');
+    if (i < n)  { item.classList.add('done');   circle.innerHTML = '✓'; }
+    if (i === n){ item.classList.add('active');  circle.textContent = i; }
+    if (i > n)  { circle.textContent = i; }
+  }
+}
+
+/* ── PROGRESS BAR SYNC ── */
+// Watches bulkStatus text for "Progress: N%" from script.js and
+// mirrors it into the visual progress bar
+const statusEl = document.getElementById('bulkStatus');
+const fillEl   = document.getElementById('progressFill');
+const pctEl    = document.getElementById('progressPct');
+const progCont = document.getElementById('progressContainer');
+
+const statusWatcher = new MutationObserver(() => {
+  const txt = statusEl.textContent || '';
+  const match = txt.match(/(\d+)%/);
+  if (match) {
+    const val = parseInt(match[1]);
+    if (progCont) progCont.classList.add('visible');
+    if (fillEl) fillEl.style.width = val + '%';
+    if (pctEl)  pctEl.textContent  = val + '%';
+    if (val >= 100 && progCont) setTimeout(() => progCont.classList.remove('visible'), 800);
+  }
+});
+if (statusEl) statusWatcher.observe(statusEl, { childList: true, characterData: true, subtree: true });
+</script>
+</body>
+</html>

@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage Events — CAS Admin</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+<style>
+/* =====================================================
+   CSS VARIABLES — Dark / Light (identical to dashboard)
+===================================================== */
+:root,
+[data-theme="dark"] {
+  --bg-grad:        radial-gradient(ellipse 80% 70% at 50% 20%, #0c2a5a 0%, #050d1a 70%);
+  --blob1:          #1a4faa;
+  --blob2:          #6c63ff;
+  --navbar-bg:      rgba(5,13,26,0.88);
+  --navbar-border:  rgba(58,180,242,0.13);
+  --card-bg:        rgba(8,22,46,0.72);
+  --card-border:    rgba(80,160,255,0.14);
+  --card-shadow:    0 0 0 1px rgba(60,180,255,0.04), 0 20px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+  --event-card-bg:  rgba(10,26,56,0.65);
+  --event-card-hover: rgba(14,32,68,0.88);
+  --grid-line:      rgba(60,140,255,0.035);
+  --text-main:      #e4eeff;
+  --text-sub:       #7aa4cc;
+  --text-hint:      #4a7aa0;
+  --accent:         #3ab4f2;
+  --accent-glow:    rgba(58,180,242,0.18);
+  --modal-bg:       #08111f;
+  --logout-color:   #f87171;
+  --logout-border:  rgba(239,68,68,0.4);
+  --logout-hover:   rgba(239,68,68,0.1);
+  --toggle-bg:      rgba(8,22,46,0.72);
+  --toggle-border:  rgba(80,160,255,0.25);
+  --toggle-color:   #7aa4cc;
+  --divider:        rgba(80,160,255,0.1);
+  --chip-bg:        rgba(58,180,242,0.1);
+  --chip-border:    rgba(58,180,242,0.22);
+  --empty-bg:       rgba(8,22,46,0.5);
+  --skeleton-bg:    rgba(30,60,100,0.4);
+  --skeleton-shine: rgba(58,180,242,0.06);
+}
+
+[data-theme="light"] {
+  --bg-grad:        radial-gradient(ellipse 80% 70% at 50% 20%, #c0d8f8 0%, #dde8f7 70%);
+  --blob1:          #90bef5;
+  --blob2:          #b4aeff;
+  --navbar-bg:      rgba(255,255,255,0.88);
+  --navbar-border:  rgba(60,130,220,0.18);
+  --card-bg:        rgba(255,255,255,0.82);
+  --card-border:    rgba(60,130,220,0.18);
+  --card-shadow:    0 4px 32px rgba(60,100,200,0.1), inset 0 1px 0 rgba(255,255,255,0.9);
+  --event-card-bg:  rgba(230,243,255,0.75);
+  --event-card-hover: rgba(210,234,255,0.95);
+  --grid-line:      rgba(60,130,220,0.06);
+  --text-main:      #0e1e38;
+  --text-sub:       #3a6090;
+  --text-hint:      #5580a8;
+  --accent:         #1a72c8;
+  --accent-glow:    rgba(26,114,200,0.12);
+  --modal-bg:       #f0f7ff;
+  --logout-color:   #dc2626;
+  --logout-border:  rgba(220,38,38,0.35);
+  --logout-hover:   rgba(220,38,38,0.08);
+  --toggle-bg:      rgba(255,255,255,0.85);
+  --toggle-border:  rgba(60,130,220,0.3);
+  --toggle-color:   #3a6090;
+  --divider:        rgba(60,130,220,0.12);
+  --chip-bg:        rgba(26,114,200,0.08);
+  --chip-border:    rgba(26,114,200,0.2);
+  --empty-bg:       rgba(220,238,255,0.5);
+  --skeleton-bg:    rgba(180,210,240,0.4);
+  --skeleton-shine: rgba(255,255,255,0.5);
+}
+
+/* =====================================================
+   BASE
+===================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background: var(--bg-grad);
+  background-attachment: fixed;
+  color: var(--text-main);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background .4s, color .3s;
+}
+
+.hidden { display: none !important; }
+
+/* BG blobs */
+.blob {
+  position: fixed; border-radius: 50%;
+  filter: blur(90px); opacity: 0.18; pointer-events: none; z-index: 0;
+  animation: blobDrift 14s ease-in-out infinite alternate;
+}
+.blob-1 { width:600px; height:600px; background:var(--blob1); top:-160px; left:-140px; }
+.blob-2 { width:380px; height:380px; background:var(--blob2); bottom:-80px; right:-80px; animation-delay:-6s; animation-duration:10s; }
+
+@keyframes blobDrift {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(30px,20px) scale(1.07); }
+}
+
+.page-grid-overlay {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* =====================================================
+   NAVBAR
+===================================================== */
+.navbar {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 52px; height: 64px;
+  background: var(--navbar-bg);
+  backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid var(--navbar-border);
+  transition: background .4s, border-color .3s;
+}
+
+.logo {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+  background: linear-gradient(135deg, var(--text-main) 30%, var(--accent) 80%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a {
+  font-size: 13px; color: var(--text-sub); text-decoration: none;
+  font-weight: 500; letter-spacing: .04em;
+  position: relative; padding-bottom: 3px; transition: color .25s;
+}
+.nav-links a::after {
+  content: ''; position: absolute; bottom: -3px; left: 0;
+  width: 0; height: 1.5px; background: var(--accent);
+  border-radius: 2px; transition: width .28s ease;
+}
+.nav-links a:hover, .nav-links a.active { color: var(--accent); }
+.nav-links a:hover::after, .nav-links a.active::after { width: 100%; }
+
+.theme-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border-radius: 40px;
+  border: 1px solid var(--toggle-border);
+  background: var(--toggle-bg); backdrop-filter: blur(12px);
+  color: var(--toggle-color);
+  font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .06em;
+  cursor: pointer; transition: all .3s ease; white-space: nowrap;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); transform: none; }
+.theme-toggle svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+.btn-logout {
+  background: transparent; border: 1px solid var(--logout-border); color: var(--logout-color);
+  font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 8px; letter-spacing: .05em;
+  cursor: pointer; transition: all .25s ease;
+}
+.btn-logout:hover {
+  background: var(--logout-hover); border-color: #ef4444; color: #ef4444; transform: translateY(-1px);
+}
+
+.menu-toggle {
+  display: none; background: none; border: none;
+  color: var(--text-main); font-size: 26px; cursor: pointer;
+}
+
+/* =====================================================
+   LAYOUT
+===================================================== */
+.container {
+  position: relative; z-index: 1;
+  max-width: 1500px; margin: 0 auto;
+  padding: 40px 52px;
+}
+
+/* =====================================================
+   MAIN SECTION CARD
+===================================================== */
+.section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+  backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: var(--card-shadow);
+  padding: 36px 40px;
+  animation: sectionUp .65s cubic-bezier(0.22,1,0.36,1) both;
+  transition: background .4s, border-color .3s, box-shadow .3s;
+}
+
+@keyframes sectionUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* section heading */
+.section h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 28px;
+  display: flex; align-items: center; gap: 10px;
+  transition: color .3s;
+}
+.section h2::before {
+  content: ''; display: inline-block;
+  width: 3px; height: 14px;
+  background: linear-gradient(180deg, var(--accent), #5b6ef5);
+  border-radius: 3px; flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(58,180,242,0.5);
+}
+
+/* count badge next to heading */
+.event-count-badge {
+  margin-left: auto;
+  font-family: 'Poppins', sans-serif;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: .06em;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  color: var(--accent);
+  padding: 3px 12px; border-radius: 20px;
+}
+
+/* =====================================================
+   BULK ACTION BAR
+===================================================== */
+.bulk-actions {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  background: var(--event-card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  margin-bottom: 24px;
+  transition: background .4s, border-color .3s;
+}
+
+.bulk-actions-label {
+  font-size: 11px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-hint);
+  margin-right: 4px;
+}
+
+button { font-family: 'Poppins', sans-serif; cursor: pointer; border: none; }
+
+.btn-excel {
+  display: flex; align-items: center; gap: 7px;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  color: #fff; border-radius: 10px;
+  font-size: 12px; font-weight: 600; letter-spacing: .05em;
+  padding: 10px 18px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 4px 16px rgba(22,163,74,0.28);
+  transition: transform .25s, box-shadow .25s;
+}
+.btn-excel::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.12), transparent 70%);
+  transform: translateX(-100%); transition: transform .5s ease;
+}
+.btn-excel:hover::before { transform: translateX(100%); }
+.btn-excel:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(22,163,74,0.42); }
+
+.btn-delete {
+  display: flex; align-items: center; gap: 7px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff; border-radius: 10px;
+  font-size: 12px; font-weight: 600; letter-spacing: .05em;
+  padding: 10px 18px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 4px 16px rgba(239,68,68,0.25);
+  transition: transform .25s, box-shadow .25s;
+}
+.btn-delete::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.12), transparent 70%);
+  transform: translateX(-100%); transition: transform .5s ease;
+}
+.btn-delete:hover::before { transform: translateX(100%); }
+.btn-delete:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(239,68,68,0.4); }
+
+/* =====================================================
+   SEARCH / FILTER BAR
+===================================================== */
+.search-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 24px;
+}
+
+.search-input-wrap {
+  flex: 1; position: relative; display: flex; align-items: center;
+}
+.search-icon {
+  position: absolute; left: 14px;
+  width: 16px; height: 16px; color: var(--text-hint); pointer-events: none;
+}
+.search-input-wrap input {
+  width: 100%; padding: 12px 14px 12px 40px;
+  background: var(--event-card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  color: var(--text-main);
+  font-family: 'Poppins', sans-serif; font-size: 13px;
+  outline: none; transition: border-color .25s, box-shadow .25s, background .4s;
+}
+.search-input-wrap input::placeholder { color: var(--text-hint); }
+.search-input-wrap input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  background: var(--event-card-hover);
+}
+
+/* =====================================================
+   EVENT GRID & CARDS
+===================================================== */
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+/* JS-injected cards — script.js adds .event-card */
+.event-card {
+  background: var(--event-card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  padding: 22px 24px;
+  display: flex; flex-direction: column; gap: 4px;
+  position: relative; overflow: hidden;
+  transition: background .3s, border-color .3s, transform .25s, box-shadow .25s;
+  animation: cardFadeIn .5s cubic-bezier(0.22,1,0.36,1) both;
+}
+.event-card:hover {
+  background: var(--event-card-hover);
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 0 0 1px var(--accent-glow);
+}
+
+/* accent bar on left edge */
+.event-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--accent), #5b6ef5);
+  border-radius: 18px 0 0 18px;
+  opacity: 0;
+  transition: opacity .25s;
+}
+.event-card:hover::before { opacity: 1; }
+
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* stagger cards */
+.event-card:nth-child(1)  { animation-delay: .05s; }
+.event-card:nth-child(2)  { animation-delay: .10s; }
+.event-card:nth-child(3)  { animation-delay: .15s; }
+.event-card:nth-child(4)  { animation-delay: .20s; }
+.event-card:nth-child(5)  { animation-delay: .25s; }
+.event-card:nth-child(6)  { animation-delay: .30s; }
+.event-card:nth-child(7)  { animation-delay: .35s; }
+.event-card:nth-child(8)  { animation-delay: .40s; }
+
+/* Card internals injected by script.js */
+.event-card h3 {
+  font-family: 'Poppins', sans-serif;
+  font-size: 15px; font-weight: 700;
+  color: var(--text-main); line-height: 1.3;
+  margin-bottom: 6px;
+}
+.event-card p {
+  font-size: 12px; color: var(--text-sub);
+  display: flex; align-items: center; gap: 5px;
+}
+
+/* checkbox */
+.event-card input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer; margin-top: 10px;
+}
+
+/* card meta chips */
+.event-meta {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; margin: 8px 0 12px;
+}
+.meta-chip {
+  font-size: 11px; font-weight: 500; letter-spacing: .04em;
+  background: var(--chip-bg); border: 1px solid var(--chip-border);
+  color: var(--accent); border-radius: 20px; padding: 3px 10px;
+}
+
+/* action buttons inside card */
+.event-actions {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.btn-copy {
+  flex: 1;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  color: var(--accent);
+  border-radius: 9px; font-size: 11.5px; font-weight: 600;
+  padding: 9px 12px; letter-spacing: .04em;
+  transition: all .22s ease;
+}
+.btn-copy:hover {
+  background: var(--accent-glow);
+  border-color: var(--accent); color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.btn.btn-excel {
+  flex: 1; padding: 9px 12px; font-size: 11.5px; border-radius: 9px;
+  box-shadow: none;
+}
+.btn.btn-delete {
+  flex: 1; padding: 9px 12px; font-size: 11.5px; border-radius: 9px;
+  box-shadow: none;
+}
+
+/* =====================================================
+   STATUS / LOADER / EMPTY STATE
+===================================================== */
+.status { font-size: 13px; margin-top: 8px; }
+.status.success { color: #22c55e; }
+.status.error   { color: #ef4444; }
+
+/* skeleton loader */
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+.skeleton-card {
+  background: var(--skeleton-bg);
+  border-radius: 18px; padding: 22px 24px;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.skel-line {
+  height: 14px; border-radius: 6px;
+  background: var(--skeleton-shine); margin-bottom: 10px;
+}
+.skel-line.wide  { width: 75%; }
+.skel-line.mid   { width: 55%; }
+.skel-line.short { width: 40%; }
+.skel-btns { display: flex; gap: 8px; margin-top: 18px; }
+.skel-btn  { flex: 1; height: 36px; border-radius: 9px; background: var(--skeleton-shine); }
+
+@keyframes shimmer {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* empty state */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 60px 20px;
+  background: var(--empty-bg);
+  border: 1px dashed var(--card-border);
+  border-radius: 18px; text-align: center;
+  animation: sectionUp .5s both;
+}
+.empty-state svg { opacity: 0.3; }
+.empty-state h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-sub);
+}
+.empty-state p { font-size: 13px; color: var(--text-hint); max-width: 320px; }
+
+/* =====================================================
+   MODAL
+===================================================== */
+.modal {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(2,8,18,0.78); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal.hidden { display: none; }
+.modal-content {
+  background: var(--modal-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px; width: 420px; max-width: 90%; padding: 28px 30px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+  animation: modalGlide .22s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes modalGlide {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-content h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 15px; font-weight: 700; letter-spacing: .08em;
+  color: var(--text-main); margin-bottom: 12px;
+}
+.modal-content p { font-size: 14px; color: var(--text-sub); margin-bottom: 22px; line-height: 1.6; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.modal-actions .btn { min-width: 90px; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+.btn-danger    { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
+.btn-secondary {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12); color: var(--text-sub);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.12); color: var(--text-main); }
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
+@media (max-width: 768px) {
+  .navbar { padding: 0 24px; }
+  .menu-toggle { display: block; }
+  .nav-links {
+    display: none; position: absolute;
+    top: 64px; right: 0; left: 0;
+    flex-direction: column; gap: 0;
+    background: var(--navbar-bg); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--navbar-border); padding: 16px 24px;
+  }
+  .nav-links.active { display: flex; }
+  .nav-links a, .nav-links button { padding: 10px 0; }
+  .container { padding: 24px 20px; }
+  .section { padding: 24px 20px; }
+  .bulk-actions { flex-direction: column; }
+  .search-bar { flex-direction: column; }
+  .event-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="page-grid-overlay"></div>
+
+<!-- ======================== NAVBAR ======================== -->
+<nav class="navbar">
+  <div class="logo">CAS · Admin</div>
+
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <div class="nav-links" id="navLinks">
+    <a href="dashboard.html">Create Event</a>
+    <a href="events.html" class="active">Manage Events</a>
+    <a href="bulk.html">Bulk Upload</a>
+    <a href="download.html">Download App</a>
+
+    <button class="theme-toggle" id="themeToggle" type="button">
+      <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </svg>
+      <span id="themeLabel">Light</span>
+    </button>
+
+    <button class="btn-logout" type="button">Logout</button>
+  </div>
+</nav>
+
+<!-- ======================== MAIN ======================== -->
+<main class="container">
+  <section class="section">
+
+    <!-- Heading + count badge -->
+    <h2>
+      All Created Events
+      <span class="event-count-badge" id="eventCountBadge">—</span>
+    </h2>
+
+    <!-- Bulk action bar -->
+    <div class="bulk-actions">
+      <span class="bulk-actions-label">Bulk Actions</span>
+
+      <button id="bulkDownloadBtn" class="btn btn-excel" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download Selected Excel
+      </button>
+
+      <button id="bulkDeleteBtn" class="btn btn-delete" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+        Delete Selected
+      </button>
+    </div>
+
+    <!-- Search bar -->
+    <div class="search-bar">
+      <div class="search-input-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="eventSearch" placeholder="Search events by name or organizer…">
+      </div>
+    </div>
+
+    <!-- Loader (shown while JS fetches) -->
+    <div id="eventLoader" class="status"></div>
+
+    <!-- Event grid — script.js injects .event-card elements here -->
+    <div id="eventList" class="event-grid"></div>
+
+  </section>
+</main>
+
+<script src="script.js"></script>
+
+<!-- Custom Modal — all IDs unchanged for script.js -->
+<div id="customModal" class="modal hidden">
+  <div class="modal-content">
+    <h3 id="modalTitle"></h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button id="modalCancel" class="btn btn-secondary">Cancel</button>
+      <button id="modalConfirm" class="btn btn-danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── THEME TOGGLE ── */
+const root    = document.documentElement;
+const toggle  = document.getElementById('themeToggle');
+const label   = document.getElementById('themeLabel');
+const iconSun = document.getElementById('iconSun');
+
+const MOON_PATH = `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>`;
+const SUN_PATH  = `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`;
+
+let dark = true;
+
+if (localStorage.getItem('cas-theme') === 'light') {
+  dark = false;
+  applyTheme();
+}
+
+toggle.addEventListener('click', () => {
+  dark = !dark;
+  applyTheme();
+  localStorage.setItem('cas-theme', dark ? 'dark' : 'light');
+});
+
+function applyTheme() {
+  root.setAttribute('data-theme', dark ? 'dark' : 'light');
+  label.textContent = dark ? 'Light' : 'Dark';
+  iconSun.innerHTML = dark ? MOON_PATH : SUN_PATH;
+}
+
+/* ── LIVE SEARCH (client-side filter on injected cards) ── */
+document.getElementById('eventSearch').addEventListener('input', function () {
+  const q = this.value.toLowerCase().trim();
+  document.querySelectorAll('#eventList .event-card').forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = (!q || text.includes(q)) ? '' : 'none';
+  });
+});
+
+/* ── UPDATE COUNT BADGE (called after script.js populates cards) ── */
+const observer = new MutationObserver(() => {
+  const cards = document.querySelectorAll('#eventList .event-card');
+  const badge = document.getElementById('eventCountBadge');
+  if (badge) badge.textContent = cards.length + ' event' + (cards.length !== 1 ? 's' : '');
+});
+observer.observe(document.getElementById('eventList'), { childList: true, subtree: true });
+</script>
+</body>
+</html>

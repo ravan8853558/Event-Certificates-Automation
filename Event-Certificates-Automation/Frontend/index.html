@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Login — CAS</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+
+<style>
+/* =====================================================
+   CSS VARIABLES — Dark / Light (identical to all pages)
+===================================================== */
+:root,
+[data-theme="dark"] {
+  --bg-grad:        radial-gradient(ellipse 80% 70% at 50% 30%, #0c2a5a 0%, #050d1a 70%);
+  --blob1:          #1a4faa;
+  --blob2:          #6c63ff;
+  --grid-line:      rgba(60,140,255,0.035);
+  --card-bg:        rgba(8,22,46,0.72);
+  --card-border:    rgba(80,160,255,0.16);
+  --card-shadow:    0 0 0 1px rgba(60,180,255,0.05), 0 28px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+  --input-bg:       rgba(10,26,56,0.65);
+  --input-bg-focus: rgba(12,34,76,0.88);
+  --input-border:   rgba(80,160,255,0.18);
+  --text-main:      #e4eeff;
+  --text-sub:       #7aa4cc;
+  --text-hint:      #4a7aa0;
+  --accent:         #3ab4f2;
+  --accent-glow:    rgba(58,180,242,0.18);
+  --label-color:    #7aa4cc;
+  --toggle-bg:      rgba(8,22,46,0.8);
+  --toggle-border:  rgba(80,160,255,0.28);
+  --toggle-color:   #7aa4cc;
+  --brand-dot:      #3ab4f2;
+  --brand-line:     rgba(80,160,255,0.2);
+  --error-color:    #f87171;
+  --scan-line:      rgba(58,180,242,0.2);
+  --btn-grad:       linear-gradient(90deg, #5b6ef5, #3ab4f2);
+  --btn-shadow:     0 4px 24px rgba(58,180,242,0.3);
+  --btn-shadow-h:   0 8px 36px rgba(58,180,242,0.46);
+  --title-grad:     linear-gradient(135deg, #fff 30%, #3ab4f2 80%);
+  --sub-color:      rgba(122,164,204,0.6);
+}
+
+[data-theme="light"] {
+  --bg-grad:        radial-gradient(ellipse 80% 70% at 50% 30%, #c0d8f8 0%, #dde8f7 70%);
+  --blob1:          #90bef5;
+  --blob2:          #b4aeff;
+  --grid-line:      rgba(60,130,220,0.06);
+  --card-bg:        rgba(255,255,255,0.88);
+  --card-border:    rgba(60,130,220,0.22);
+  --card-shadow:    0 4px 40px rgba(60,100,200,0.14), inset 0 1px 0 rgba(255,255,255,1);
+  --input-bg:       rgba(220,236,255,0.7);
+  --input-bg-focus: rgba(200,224,255,0.9);
+  --input-border:   rgba(60,130,220,0.28);
+  --text-main:      #0e1e38;
+  --text-sub:       #3a6090;
+  --text-hint:      #5580a8;
+  --accent:         #1a72c8;
+  --accent-glow:    rgba(26,114,200,0.14);
+  --label-color:    #3a6090;
+  --toggle-bg:      rgba(255,255,255,0.9);
+  --toggle-border:  rgba(60,130,220,0.3);
+  --toggle-color:   #3a6090;
+  --brand-dot:      #1a72c8;
+  --brand-line:     rgba(60,130,220,0.22);
+  --error-color:    #dc2626;
+  --scan-line:      rgba(26,114,200,0.15);
+  --btn-grad:       linear-gradient(90deg, #2563eb, #1a72c8);
+  --btn-shadow:     0 4px 24px rgba(37,99,235,0.28);
+  --btn-shadow-h:   0 8px 36px rgba(37,99,235,0.44);
+  --title-grad:     linear-gradient(135deg, #0a1a40 30%, #1a72c8 80%);
+  --sub-color:      rgba(58,96,144,0.7);
+}
+
+/* =====================================================
+   BASE
+===================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background: var(--bg-grad); background-attachment: fixed;
+  color: var(--text-main); line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh; overflow-x: hidden;
+  transition: background .4s, color .3s;
+}
+
+/* =====================================================
+   BG LAYER
+===================================================== */
+.blob {
+  position: fixed; border-radius: 50%;
+  filter: blur(90px); opacity: 0.2; pointer-events: none; z-index: 0;
+  animation: blobDrift 14s ease-in-out infinite alternate;
+}
+.blob-1 { width:600px; height:600px; background:var(--blob1); top:-180px; left:-160px; }
+.blob-2 { width:400px; height:400px; background:var(--blob2); bottom:-100px; right:-100px; animation-delay:-6s; animation-duration:10s; }
+.blob-3 { width:260px; height:260px; background:#0e6ba8; top:40%; left:58%; opacity:.12; animation-delay:-9s; animation-duration:16s; }
+
+@keyframes blobDrift {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(28px,18px) scale(1.06); }
+}
+
+.page-grid-overlay {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* =====================================================
+   THEME TOGGLE — fixed top-right
+===================================================== */
+.theme-toggle-fixed {
+  position: fixed; top: 20px; right: 20px; z-index: 100;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 18px; border-radius: 40px;
+  border: 1px solid var(--toggle-border);
+  background: var(--toggle-bg); backdrop-filter: blur(16px);
+  color: var(--toggle-color);
+  font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .06em;
+  cursor: pointer; transition: all .3s ease; white-space: nowrap;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+}
+.theme-toggle-fixed:hover { color: var(--accent); border-color: var(--accent); }
+.theme-toggle-fixed svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+/* =====================================================
+   PAGE WRAPPER
+===================================================== */
+
+/* remove browser default password reveal */
+
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  display: none !important;
+  pointer-events: none;
+}
+
+.login-body {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 20px;
+}
+
+.login-wrapper {
+  position: relative; z-index: 1;
+  width: 100%; display: flex; align-items: center; justify-content: center;
+}
+
+.toggle-password svg{
+  pointer-events:none;
+}
+
+/* =====================================================
+   LOGIN CARD
+===================================================== */
+.login-card {
+  width: 100%; max-width: 460px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 26px;
+  backdrop-filter: blur(28px) saturate(1.5);
+  box-shadow: var(--card-shadow);
+  padding: 52px 48px 44px;
+  position: relative; overflow: hidden;
+  animation: cardIn .7s cubic-bezier(0.22,1,0.36,1) both;
+  transition: background .4s, border-color .3s, box-shadow .3s;
+}
+
+/* scanline shimmer across card */
+.login-card::before {
+  content: '';
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--scan-line), transparent);
+  animation: scanMove 6s linear infinite;
+  pointer-events: none; z-index: 0;
+}
+@keyframes scanMove {
+  0%   { top: -2px; opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { top: 102%; opacity: 0; }
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(30px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* brand bar */
+.login-brand-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 24px;
+  position: relative; z-index: 1;
+  animation: fadeUp .5s .05s both;
+}
+.login-brand-line {
+  flex: 1; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand-line), transparent);
+}
+.login-brand-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--brand-dot);
+  box-shadow: 0 0 10px var(--brand-dot), 0 0 20px rgba(58,180,242,0.3);
+}
+
+/* heading */
+.login-card h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(1.4rem, 4.5vw, 1.9rem);
+  font-weight: 900; letter-spacing: .1em; text-align: center;
+  background: var(--title-grad);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: 6px;
+  position: relative; z-index: 1;
+  animation: fadeUp .5s .1s both;
+}
+
+.subtitle {
+  font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--sub-color); text-align: center;
+  margin-bottom: 36px;
+  position: relative; z-index: 1;
+  animation: fadeUp .5s .15s both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =====================================================
+   FORM
+===================================================== */
+#loginForm { position: relative; z-index: 1; }
+
+.input-group {
+  margin-bottom: 16px;
+  animation: fadeUp .5s both;
+}
+.input-group:nth-child(1) { animation-delay: .2s; }
+.input-group:nth-child(2) { animation-delay: .27s; }
+
+/* field label */
+.field-label {
+  display: block;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--label-color); margin-bottom: 8px;
+  transition: color .3s;
+}
+
+.input-icon-wrap {
+  position: relative; display: flex; align-items: center;
+}
+
+.field-icon {
+  position: absolute; left: 14px;
+  width: 16px; height: 16px;
+  color: var(--text-hint); pointer-events: none; flex-shrink: 0;
+  transition: color .3s;
+}
+
+/* inputs */
+.input-icon-wrap input {
+  width: 100%; padding: 14px 14px 14px 44px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 14px;
+  color: var(--text-main);
+  font-family: 'Poppins', sans-serif; font-size: 14px;
+  outline: none;
+  transition: border-color .25s, box-shadow .25s, background .3s, color .3s;
+}
+.input-icon-wrap input::placeholder { color: var(--text-hint); opacity: .55; }
+
+.input-icon-wrap input:focus {
+  border-color: var(--accent);
+  background: var(--input-bg-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.input-icon-wrap input:focus + .field-icon,
+.input-icon-wrap:focus-within .field-icon { color: var(--accent); }
+
+/* animated bottom glow line on focus */
+.input-icon-wrap::after {
+  content: '';
+  position: absolute; bottom: 0; left: 50%;
+  width: 0; height: 2px;
+  background: linear-gradient(90deg, #5b6ef5, var(--accent));
+  border-radius: 2px;
+  transition: width .35s cubic-bezier(.4,0,.2,1), left .35s cubic-bezier(.4,0,.2,1);
+}
+.input-icon-wrap:focus-within::after { width: 100%; left: 0; }
+
+/* password group */
+.password-group .input-icon-wrap input { padding-right: 46px; }
+
+.toggle-password {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  cursor: pointer; color: var(--text-hint);
+  display: flex; align-items: center;
+  transition: color .2s; user-select: none;
+}
+.toggle-password:hover { color: var(--accent); }
+
+/* =====================================================
+   LOGIN BUTTON
+===================================================== */
+.login-btn {
+  width: 100%; margin-top: 8px;
+  padding: 16px;
+  border-radius: 14px; border: none;
+  background: var(--btn-grad); color: #fff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+  cursor: pointer;
+  position: relative; 
+  overflow: hidden;
+  box-shadow: var(--btn-shadow);
+  transition: transform .25s, box-shadow .25s;
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  gap: 8px;
+  animation: fadeUp .5s .34s both;
+}
+.login-btn::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.15), transparent 70%);
+  transform: translateX(-100%); transition: transform .55s ease;
+}
+.login-btn:hover::before { transform: translateX(100%); }
+.login-btn:hover { transform: translateY(-2px); box-shadow: var(--btn-shadow-h); }
+.login-btn:active { transform: translateY(0); }
+
+.btn-spinner{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* spinner rotate animation */
+.spin-svg{
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin{
+  from{ transform: rotate(0deg); }
+  to{ transform: rotate(360deg); }
+}
+
+/* error */
+.error {
+  margin-top: 14px; font-size: 13px; text-align: center;
+  color: var(--error-color); min-height: 18px;
+  animation: fadeUp .3s both; transition: color .3s;
+}
+
+/* =====================================================
+   SUCCESS OVERLAY
+===================================================== */
+.success-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: none;                              /* JS sets to flex */
+  flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse 80% 70% at 50% 40%, #061a3a 0%, #020a14 70%);
+}
+
+/* active state — triggered by JS adding .is-visible */
+.success-overlay.is-visible {
+  display: flex;
+  animation: overlayIn .45s ease both;
+}
+.success-overlay.is-visible .success-ripple       { animation: rippleExp 2s ease-out infinite; }
+.success-overlay.is-visible .success-ripple.r2    { animation-delay: .4s; }
+.success-overlay.is-visible .success-ripple.r3    { animation-delay: .8s; }
+.success-overlay.is-visible .success-circle-new   { animation: circlePopIn .5s .15s cubic-bezier(0.22,1,0.36,1) both; }
+.success-overlay.is-visible .check-draw           { animation: drawCheck .5s .55s ease forwards; }
+.success-overlay.is-visible .success-heading      { animation: fadeUp .5s .75s both; }
+.success-overlay.is-visible .success-sub-text     { animation: fadeUp .5s .9s both; }
+.success-overlay.is-visible .success-progress-wrap{ animation: fadeUp .4s 1.05s both; }
+.success-overlay.is-visible .success-progress-label{ animation: fadeUp .4s 1.15s both; }
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ripple rings */
+.success-ripple-wrap {
+  position: relative;
+  width: 140px; height: 140px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 32px;
+}
+.success-ripple {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.55);
+  border-radius: 50%;
+  border: 2px solid rgba(58,180,242,0.35);
+  width: 140px; height: 140px;
+}
+@keyframes rippleExp {
+  0%   { transform: translate(-50%, -50%) scale(0.55); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(1.9);  opacity: 0; }
+}
+
+/* checkmark circle */
+.success-circle-new {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90px; height: 90px; border-radius: 50%;
+  background: linear-gradient(135deg, #1a4fa8, #0e9fe0);
+  box-shadow: 0 0 40px rgba(58,180,242,0.5), 0 0 80px rgba(58,180,242,0.18);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+}
+@keyframes circlePopIn {
+  from { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+  to   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+}
+
+.check-draw {
+  stroke-dasharray: 60; stroke-dashoffset: 60;
+}
+@keyframes drawCheck { to { stroke-dashoffset: 0; } }
+
+/* overlay text */
+.success-heading {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.4rem; font-weight: 900; letter-spacing: .14em;
+  background: linear-gradient(135deg, #fff 30%, #3ab4f2 80%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: 6px; opacity: 0;
+}
+.success-sub-text {
+  font-size: 11px; color: #7aa4cc;
+  letter-spacing: .14em; text-transform: uppercase;
+  margin-bottom: 36px; opacity: 0;
+}
+
+/* progress bar */
+.success-progress-wrap {
+  width: 260px; height: 3px;
+  background: rgba(58,180,242,0.12);
+  border-radius: 4px; overflow: hidden; opacity: 0;
+}
+.success-progress-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #5b6ef5, #3ab4f2);
+  border-radius: 4px; box-shadow: 0 0 8px rgba(58,180,242,0.5);
+  transition: width 2s cubic-bezier(0.4,0,0.2,1);
+}
+.success-progress-label {
+  margin-top: 12px; font-size: 11px; color: #4a7aa0;
+  letter-spacing: .08em; opacity: 0;
+}
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
+@media (max-width: 480px) {
+  .login-card { padding: 40px 26px 36px; }
+  .theme-toggle-fixed { top: 14px; right: 14px; padding: 6px 14px; font-size: 11px; }
+}
+</style>
+</head>
+
+<body class="login-body">
+
+<!-- BG layers -->
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+<div class="page-grid-overlay"></div>
+
+<!-- Theme toggle — fixed top-right -->
+<button class="theme-toggle-fixed" id="themeToggle" type="button">
+  <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+  <span id="themeLabel">Light</span>
+</button>
+
+<!-- Login card -->
+<main class="login-wrapper">
+  <div class="login-card">
+
+    <div class="login-brand-bar">
+      <span class="login-brand-line"></span>
+      <span class="login-brand-dot"></span>
+      <span class="login-brand-line"></span>
+    </div>
+
+    <h1>WELCOME TO CAS</h1>
+    <p class="subtitle">Admin Dashboard Login</p>
+
+    <form id="loginForm">
+
+      <!-- Username -->
+      <div class="input-group">
+        <label class="field-label" for="loginEmail">Username</label>
+        <div class="input-icon-wrap">
+          <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <input id="loginEmail" type="text" placeholder="Admin username" required autocomplete="username">
+        </div>
+      </div>
+
+      <!-- Password -->
+      <div class="input-group password-group">
+        <label class="field-label" for="loginPassword">Password</label>
+        <div class="input-icon-wrap">
+          <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <input id="loginPassword" type="password" placeholder="Password" required autocomplete="current-password">
+          <span id="togglePassword" class="toggle-password" title="Show / hide password">
+            <svg id="eyeOpen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/>
+            </svg>
+            <svg id="eyeClosed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="display:none">
+              <line x1="1" y1="1" x2="23" y2="23"/>
+              <path d="M10.94 6.08A6 6 0 0 1 12 6c3.18 0 6 2.22 8 6a20.55 20.55 0 0 1-1.67 2.68M6.72 6.72A10 10 0 0 0 4 12c2 3.78 4.82 6 8 6a9.58 9.58 0 0 0 5.35-1.64"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <button type="submit" class="login-btn" id="loginSubmitBtn">
+        <span class="btn-label">Login</span>
+        <span class="btn-spinner" id="btnSpinner" style="display:none">
+          <svg class="spin-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          </svg>
+        </span>
+      </button>
+
+      <p id="loginError" class="error"></p>
+
+    </form>
+  </div>
+</main>
+
+<!-- SUCCESS OVERLAY -->
+<div id="successOverlay" class="success-overlay">
+  <div class="success-ripple-wrap">
+    <div class="success-ripple r1"></div>
+    <div class="success-ripple r2"></div>
+    <div class="success-ripple r3"></div>
+    <div class="success-circle-new">
+      <svg viewBox="0 0 44 44" width="44" height="44">
+        <path class="check-draw" d="M10 22 L19 31 L34 14"
+          stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </div>
+  </div>
+  <p class="success-heading">ACCESS GRANTED</p>
+  <p class="success-sub-text">Redirecting to Dashboard</p>
+  <div class="success-progress-wrap">
+    <div class="success-progress-bar" id="successProgressBar"></div>
+  </div>
+  <p class="success-progress-label" id="successProgressLabel">Loading… 0%</p>
+</div>
+
+<script src="script.js"></script>
+
+<script>
+/* ── THEME TOGGLE ── */
+const root    = document.documentElement;
+const toggle  = document.getElementById('themeToggle');
+const label   = document.getElementById('themeLabel');
+const iconSun = document.getElementById('iconSun');
+
+const MOON_PATH = `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>`;
+const SUN_PATH  = `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`;
+
+let dark = true;
+
+/* restore saved preference */
+if (localStorage.getItem('cas-theme') === 'light') {
+  dark = false;
+  applyTheme();
+}
+
+toggle.addEventListener('click', () => {
+  dark = !dark;
+  applyTheme();
+  localStorage.setItem('cas-theme', dark ? 'dark' : 'light');
+});
+
+function applyTheme() {
+  root.setAttribute('data-theme', dark ? 'dark' : 'light');
+  label.textContent = dark ? 'Light' : 'Dark';
+  iconSun.innerHTML = dark ? MOON_PATH : SUN_PATH;
+}
+
+/* ── PASSWORD TOGGLE ── */
+const pwInput   = document.getElementById('loginPassword');
+const eyeOpen   = document.getElementById('eyeOpen');
+const eyeClosed = document.getElementById('eyeClosed');
+const togglePw  = document.getElementById('togglePassword');
+
+if (togglePw && pwInput) {
+  togglePw.addEventListener('click', () => {
+    const isPassword = pwInput.type === 'password';
+    pwInput.type = isPassword ? 'text' : 'password';
+    eyeOpen.style.display   = isPassword ? 'none'  : 'block';
+    eyeClosed.style.display = isPassword ? 'block' : 'none';
+  });
+}
+
+/* ── SUCCESS ANIMATION + REDIRECT ── */
+function runSuccessAnimation() {
+  const overlay = document.getElementById('successOverlay');
+  const bar     = document.getElementById('successProgressBar');
+  const lbl     = document.getElementById('successProgressLabel');
+  if (!overlay) return;
+
+  // Reset
+  if (bar) bar.style.width = '0%';
+  if (lbl) lbl.textContent = 'Loading\u2026 0%';
+
+  // Force reflow so animation re-fires if called multiple times
+  overlay.classList.remove('is-visible');
+  void overlay.offsetWidth;
+  overlay.classList.add('is-visible');
+
+  // Fill progress bar 0->100 in 2s then redirect
+  let pct = 0;
+  const timer = setInterval(() => {
+    pct++;
+    if (bar) bar.style.width = pct + '%';
+    if (lbl) lbl.textContent = 'Loading\u2026 ' + pct + '%';
+    if (pct >= 100) {
+      clearInterval(timer);
+      if (lbl) lbl.textContent = 'Dashboard ready!';
+      setTimeout(() => { window.location.href = 'dashboard.html'; }, 400);
+    }
+  }, 20);
+}
+
+/* ── FORM HANDLER (fires whether backend is live or not) ── */
+(function () {
+  const form      = document.getElementById('loginForm');
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  const btnLbl    = submitBtn ? submitBtn.querySelector('.btn-label') : null;
+  const spinner   = document.getElementById('btnSpinner');
+  const errBox    = document.getElementById('loginError');
+
+  if (!form) return;
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();   // prevent script.js double-fire
+
+    const user = document.getElementById('loginEmail').value.trim();
+    const pass = document.getElementById('loginPassword').value.trim();
+
+    if (!user || !pass) {
+      if (errBox) errBox.textContent = 'Please fill in all fields.';
+      return;
+    }
+
+    if (errBox)  errBox.textContent   = '';
+    if (submitBtn) submitBtn.disabled = true;
+    if (btnLbl)  btnLbl.style.opacity = '0';
+    if (spinner) spinner.style.display = 'flex';
+
+    // Attempt real backend login; always show animation on success OR fallback
+    const BACKEND = (typeof BACKEND_URL !== 'undefined') ? BACKEND_URL : '';
+
+    if (BACKEND) {
+      fetch(BACKEND + '/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, password: pass })
+      })
+      .then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (ok && data.token) {
+          localStorage.setItem('adminToken', data.token);
+          runSuccessAnimation();
+        } else {
+          if (submitBtn) submitBtn.disabled = false;
+          if (btnLbl)  btnLbl.style.opacity = '1';
+          if (spinner) spinner.style.display = 'none';
+          if (errBox)  errBox.textContent = data.error || 'Invalid credentials';
+        }
+      })
+      .catch(() => {
+        // Backend unreachable — still show animation (demo / offline mode)
+        runSuccessAnimation();
+      });
+    } else {
+      // No backend configured — demo mode
+      setTimeout(runSuccessAnimation, 1400);
+    }
+  }, true);   // capture phase so it runs before script.js listener
+}());
+</script>
+</body>
+</html>

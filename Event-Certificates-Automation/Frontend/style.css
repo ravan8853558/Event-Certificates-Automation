@@ -1,0 +1,907 @@
+/* =====================================
+   1. RESET & BASE
+===================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: "Poppins", sans-serif;
+  background:
+    radial-gradient(circle at 20% 10%, #1e293b 0%, #0f172a 60%),
+    #0f172a;
+  color: #ffffff;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* =====================================
+   2. NAVBAR
+===================================== */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 20px 60px;
+
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(15px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #94a3b8;
+  font-weight: 500;
+  transition: color 0.25s ease;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+  color: #ffffff;
+}
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+/* =====================================
+   3. BUTTON SYSTEM
+===================================== */
+
+button {
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-2px);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #ffffff;
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #ffffff;
+}
+
+.btn-excel {
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  color: #ffffff;
+}
+
+.btn-delete {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #ffffff;
+}
+
+.btn-logout {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #ffffff;
+}
+
+.full {
+  width: 100%;
+}
+
+/* =====================================
+   4. LAYOUT
+===================================== */
+
+.container {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 60px;
+}
+
+.section {
+  margin-bottom: 50px;
+  padding: 40px;
+
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}
+
+.section h2 {
+  font-size: 22px;
+  margin-bottom: 25px;
+}
+
+.subtitle {
+  font-size: 14px;
+  opacity: 0.8;
+  margin-bottom: 25px;
+}
+
+.hint {
+  font-size: 13px;
+  opacity: 0.75;
+  margin-top: 15px;
+}
+
+/* =====================================
+   5. GRID SYSTEM
+===================================== */
+
+.row {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 25px;
+}
+
+.row.grid-2 .col {
+  flex: 1;
+}
+
+.row.grid-1 .col {
+  width: 100%;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* =====================================
+   6. FORM ELEMENTS
+===================================== */
+
+label {
+  font-size: 14px;
+  margin-bottom: 8px;
+  opacity: 0.85;
+}
+
+input,
+select {
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 14px;
+
+  transition: all 0.25s ease;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+/* =====================================
+   7. UPLOAD AREA
+===================================== */
+
+.upload-area {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.file-box {
+  flex: 1;
+  padding: 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.file-box input {
+  display: none;
+}
+
+/* =====================================
+   8. DESIGNER
+===================================== */
+
+.designer-wrapper {
+  display: flex;
+  gap: 30px;
+  margin-top: 30px;
+}
+
+.canvas-container {
+  flex: 3;
+  padding: 20px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 18px;
+}
+
+.canvas-container canvas {
+  touch-action: none;
+  border-radius: 12px;
+  cursor: move;
+  max-width: 100%;
+  height: auto;
+}
+
+.designer-right {
+  flex: 1;
+  padding: 25px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =====================================
+   9. EVENTS PAGE
+===================================== */
+
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.event-card {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.05);
+}
+
+.event-actions {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bulk-actions {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+/* ============================================
+   10. BULK PAGE – COMPLETE STYLING
+============================================ */
+
+/* Section Enhancement */
+.section.highlight {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+}
+
+/* Subtitle */
+.subtitle {
+  margin-top: 8px;
+  margin-bottom: 30px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* Event Select Area */
+#eventSelect {
+  margin-top: 8px;
+}
+
+/* Event Info Box */
+.event-info {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+/* Event Preview Card */
+.event-preview {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.2);
+  animation: fadeIn 0.3s ease;
+}
+
+.event-preview p {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+/* Upload Area */
+.upload-area {
+  margin-top: 30px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.file-box {
+  flex: 1;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.file-box:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.file-box input {
+  display: none;
+}
+
+/* Upload Button */
+#bulkUploadBtn {
+  min-width: 150px;
+}
+
+/* Mapping Section */
+.mapping-section {
+  margin-top: 30px;
+  padding: 25px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  animation: fadeIn 0.3s ease;
+}
+
+.mapping-section h3 {
+  font-size: 16px;
+  margin-bottom: 15px;
+}
+
+#nameColumnSelect {
+  margin-bottom: 15px;
+}
+
+/* Generate Button */
+#generateBulkBtn {
+  width: 100%;
+}
+
+/* Download Section */
+.download-section {
+  margin-top: 25px;
+  animation: fadeIn 0.3s ease;
+}
+
+#downloadZipBtn {
+  width: 100%;
+}
+
+/* Status Message */
+#bulkStatus {
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+/* Status Variations */
+#bulkStatus.success {
+  color: #22c55e;
+}
+
+#bulkStatus.error {
+  color: #ef4444;
+}
+
+/* Fade Animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+/* =====================================
+   11. STATUS
+===================================== */
+
+.status {
+  margin-top: 15px;
+  font-size: 14px;
+}
+
+.status.success {
+  color: #22c55e;
+}
+
+.status.error {
+  color: #ef4444;
+}
+
+/* ================= LOGIN ================= */
+
+.login-body {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at 20% 20%, #1e293b, #0f172a 60%);
+}
+
+.login-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 50px 40px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+  text-align: center;
+}
+
+.login-card h1 {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.input-group {
+  margin-bottom: 18px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  font-size: 14px;
+}
+
+.input-group input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+.password-group {
+  position: relative;
+}
+
+.password-group input {
+  padding-right: 45px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-size: 16px;
+  opacity: 0.7;
+  user-select: none;
+}
+
+.toggle-password:hover {
+  opacity: 1;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  font-weight: 600;
+  background: linear-gradient(135deg,#3b82f6,#2563eb);
+  color: white;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.login-btn:hover {
+  transform: translateY(-2px);
+}
+
+.error {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #ef4444;
+}
+
+/* SUCCESS OVERLAY */
+
+.success-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.success-circle {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 40px;
+  color: white;
+  animation: pop 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pop {
+  from { transform: scale(0.5); }
+  to { transform: scale(1); }
+}
+
+/* =====================================
+   14. RESPONSIVE
+===================================== */
+
+@media (max-width: 992px) {
+
+  .container {
+    padding: 40px 25px;
+  }
+
+  .designer-wrapper {
+    flex-direction: column;
+  }
+
+  .navbar {
+    padding: 20px 30px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .nav-links {
+    position: absolute;
+    gap: 14px;
+    top: 64px;
+    left: 0;
+    right: 0;
+    width: 100%;
+    flex-direction: column;
+    z-index: 2000;
+    flex-direction: column;
+    padding: 20px;
+    background: #0f172a;
+    backdrop-filter: none;
+    display: none;
+  }
+
+  .nav-links hr {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin: 10px 0;
+  }
+
+  .nav-links a,
+  .nav-links button {
+
+    width: 100%;
+    text-align: center;
+
+    padding: 12px 0;
+
+    border: none;
+    background: none;
+
+    font-size: 14px;
+    color: #94a3b8;
+
+  }
+  .nav-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .nav-actions button {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .nav-links button:hover {
+
+    background: rgba(59,130,246,0.12);
+
+    color: inherit;
+
+  }
+  .theme-toggle {
+
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.05);
+
+    border-radius: 10px;
+
+    padding: 10px 16px;
+
+    color: #cbd5f5;
+  
+    transition: all 0.25s ease;
+
+  }
+
+  .theme-toggle:hover {
+  
+    border-color: #3b82f6;
+
+    background: rgba(59,130,246,0.18);
+
+    color: inherit;
+
+  }
+
+  .btn-logout {
+    background: #ef4444;
+    color: white;
+  }
+
+  .btn-logout:hover {
+    background: #dc2626;
+    color: #ffffff;
+  }
+ 
+  .nav-links.active {
+    display: flex;
+  }
+
+  .nav-links .theme-toggle,
+
+  .nav-links .btn-logout {
+
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+
+    padding: 12px 0;
+
+    border-radius: 0;
+    background: none;
+  
+  }
+
+  .row,
+  .upload-area,
+  .bulk-actions {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+
+  .container {
+    padding: 30px 15px;
+  }
+
+  .section {
+    padding: 25px;
+  }
+
+  .logo {
+    font-size: 16px;
+  }
+}
+
+/* ===== Dropdown Visibility Fix ===== */
+
+select {
+  background-color: #1f2937;
+  color: #ffffff;
+  border: 1px solid #374151;
+}
+
+select option {
+  background-color: #1f2937 !important;
+  color: #ffffff !important;
+}
+
+.nav-links button {
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* ===== Professional Modal ===== */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: #1f2937;
+  padding: 28px 30px;
+  border-radius: 14px;
+  width: 420px;
+  max-width: 90%;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  animation: modalFade 0.18s ease-out;
+}
+
+.modal-content h3 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: left;
+}
+
+.modal-content p {
+  margin: 0 0 22px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  text-align: left;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-actions .btn {
+  min-width: 90px;
+}
+
+/* Danger confirm button */
+.btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+@keyframes modalFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.logout-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  z-index:9999;
+}
+
+.logout-box{
+  text-align:center;
+  padding:30px 40px;
+  border-radius:14px;
+  background:#0f172a;
+  color:white;
+  font-size:14px;
+}
+
+.logout-spinner{
+  width:40px;
+  height:40px;
+  border:4px solid rgba(255,255,255,0.2);
+  border-top:4px solid #3b82f6;
+  border-radius:50%;
+  margin:0 auto 15px;
+  animation:spin 1s linear infinite;
+}
+
+@keyframes spin{
+  to{ transform:rotate(360deg); }
+}
+
+/* ================= MOBILE NAVBAR ================= */
+
+@media (max-width:768px){
+
+  .navbar{
+    padding:20px;
+  }
+
+  .menu-toggle{
+    display:block;
+  }
+
+  .nav-links{
+    position:absolute;
+    top:64px;
+    left:0;
+    width:100%;
+    background:#0f172a;
+    flex-direction:column;
+    padding:20px;
+    gap:16px;
+    display:none;
+  }
+
+  .nav-links.active{
+    display:flex;
+  }
+
+}

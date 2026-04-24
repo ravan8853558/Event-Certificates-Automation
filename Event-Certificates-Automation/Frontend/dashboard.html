@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — CAS Admin</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+<style>
+/* =====================================================
+   CSS VARIABLES — Dark / Light theme
+===================================================== */
+:root,
+[data-theme="dark"] {
+  --bg-grad:        radial-gradient(ellipse 80% 70% at 50% 20%, #0c2a5a 0%, #050d1a 70%);
+  --blob1:          #1a4faa;
+  --blob2:          #6c63ff;
+  --navbar-bg:      rgba(5,13,26,0.88);
+  --navbar-border:  rgba(58,180,242,0.13);
+  --card-bg:        rgba(8,22,46,0.72);
+  --card-border:    rgba(80,160,255,0.14);
+  --card-shadow:    0 0 0 1px rgba(60,180,255,0.04), 0 20px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+  --card-highlight: rgba(8,18,44,0.75);
+  --input-bg:       rgba(10,26,56,0.65);
+  --input-bg-focus: rgba(12,34,76,0.88);
+  --input-border:   rgba(80,160,255,0.18);
+  --grid-line:      rgba(60,140,255,0.035);
+  --text-main:      #e4eeff;
+  --text-sub:       #7aa4cc;
+  --text-hint:      #4a7aa0;
+  --label-color:    #7aa4cc;
+  --accent:         #3ab4f2;
+  --modal-bg:       #08111f;
+  --file-bg:        rgba(10,26,56,0.55);
+  --file-hover:     rgba(12,34,76,0.72);
+  --section-action: rgba(5,12,26,0.55);
+  --designer-panel: rgba(5,12,26,0.5);
+  --hint-bg:        rgba(58,180,242,0.05);
+  --logout-color:   #f87171;
+  --logout-border:  rgba(239,68,68,0.4);
+  --logout-hover:   rgba(239,68,68,0.1);
+  --toggle-bg:      rgba(8,22,46,0.72);
+  --toggle-border:  rgba(80,160,255,0.25);
+  --toggle-color:   #7aa4cc;
+  --select-bg:      #0e1e36;
+  --divider:        rgba(80,160,255,0.1);
+}
+
+[data-theme="light"] {
+  --bg-grad:        radial-gradient(ellipse 80% 70% at 50% 20%, #c0d8f8 0%, #dde8f7 70%);
+  --blob1:          #90bef5;
+  --blob2:          #b4aeff;
+  --navbar-bg:      rgba(255,255,255,0.88);
+  --navbar-border:  rgba(60,130,220,0.18);
+  --card-bg:        rgba(255,255,255,0.82);
+  --card-border:    rgba(60,130,220,0.18);
+  --card-shadow:    0 4px 32px rgba(60,100,200,0.1), inset 0 1px 0 rgba(255,255,255,0.9);
+  --card-highlight: rgba(240,248,255,0.9);
+  --input-bg:       rgba(225,238,255,0.7);
+  --input-bg-focus: rgba(210,230,255,0.9);
+  --input-border:   rgba(60,130,220,0.25);
+  --grid-line:      rgba(60,130,220,0.06);
+  --text-main:      #0e1e38;
+  --text-sub:       #3a6090;
+  --text-hint:      #5580a8;
+  --label-color:    #3a6090;
+  --accent:         #1a72c8;
+  --modal-bg:       #f0f7ff;
+  --file-bg:        rgba(210,230,255,0.5);
+  --file-hover:     rgba(190,220,255,0.8);
+  --section-action: rgba(230,242,255,0.7);
+  --designer-panel: rgba(220,238,255,0.55);
+  --hint-bg:        rgba(26,114,200,0.06);
+  --logout-color:   #dc2626;
+  --logout-border:  rgba(220,38,38,0.35);
+  --logout-hover:   rgba(220,38,38,0.08);
+  --toggle-bg:      rgba(255,255,255,0.85);
+  --toggle-border:  rgba(60,130,220,0.3);
+  --toggle-color:   #3a6090;
+  --select-bg:      #e8f2ff;
+  --divider:        rgba(60,130,220,0.12);
+}
+
+/* =====================================================
+   BASE
+===================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background: var(--bg-grad); background-attachment: fixed;
+  color: var(--text-main); line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh; overflow-x: hidden;
+  transition: background .4s, color .3s;
+}
+
+.hidden { display: none !important; }
+
+/* blobs */
+.blob {
+  position: fixed; border-radius: 50%;
+  filter: blur(90px); opacity: 0.18; pointer-events: none; z-index: 0;
+  animation: blobDrift 14s ease-in-out infinite alternate;
+}
+.blob-1 { width:600px; height:600px; background:var(--blob1); top:-160px; left:-140px; }
+.blob-2 { width:380px; height:380px; background:var(--blob2); bottom:-80px; right:-80px; animation-delay:-6s; animation-duration:10s; }
+@keyframes blobDrift {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(30px,20px) scale(1.07); }
+}
+
+.page-grid-overlay {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* =====================================================
+   NAVBAR
+===================================================== */
+.navbar {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 52px; height: 64px;
+  background: var(--navbar-bg);
+  backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid var(--navbar-border);
+  transition: background .4s, border-color .3s;
+}
+
+.logo {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+  background: linear-gradient(135deg, var(--text-main) 30%, var(--accent) 80%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a {
+  font-size: 13px; color: var(--text-sub); text-decoration: none;
+  font-weight: 500; letter-spacing: .04em;
+  position: relative; padding-bottom: 3px; transition: color .25s;
+}
+.nav-links a::after {
+  content: ''; position: absolute; bottom: -3px; left: 0;
+  width: 0; height: 1.5px; background: var(--accent);
+  border-radius: 2px; transition: width .28s ease;
+}
+.nav-links a:hover, .nav-links a.active { color: var(--accent); }
+.nav-links a:hover::after, .nav-links a.active::after { width: 100%; }
+
+.theme-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border-radius: 40px;
+  border: 1px solid var(--toggle-border);
+  background: var(--toggle-bg); backdrop-filter: blur(12px);
+  color: var(--toggle-color);
+  font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .06em;
+  cursor: pointer; transition: all .3s ease; white-space: nowrap;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); transform: none; }
+.theme-toggle svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+.btn-logout {
+  background: transparent; border: 1px solid var(--logout-border); color: var(--logout-color);
+  font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 8px; letter-spacing: .05em;
+  cursor: pointer; transition: all .25s ease;
+}
+.btn-logout:hover { background: var(--logout-hover); border-color: #ef4444; color: #ef4444; transform: translateY(-1px); }
+
+.menu-toggle { display: none; background: none; border: none; color: var(--text-main); font-size: 26px; cursor: pointer; }
+
+/* =====================================================
+   MAIN LAYOUT — full-width stacked
+===================================================== */
+.container {
+  position: relative; z-index: 1;
+  max-width: 1500px; margin: 0 auto;
+  padding: 40px 52px;
+  display: flex; flex-direction: column; gap: 24px;
+}
+
+/* =====================================================
+   SECTION CARDS
+===================================================== */
+.section {
+  width: 100%;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 22px;
+  backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: var(--card-shadow);
+  padding: 36px 44px;
+  animation: sectionUp .65s cubic-bezier(0.22,1,0.36,1) both;
+  transition: background .4s, border-color .3s, box-shadow .3s;
+}
+.section:nth-child(1) { animation-delay: .06s; }
+.section:nth-child(2) { animation-delay: .14s; }
+.section:nth-child(3) { animation-delay: .22s; }
+
+@keyframes sectionUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.section.highlight {
+  border-color: rgba(91,110,245,0.2);
+  background: var(--card-highlight);
+}
+
+.action-section {
+  background: var(--section-action);
+  border-color: rgba(58,180,242,0.12);
+  padding: 28px 44px;
+}
+
+/* section headings */
+.section h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 28px;
+  display: flex; align-items: center; gap: 10px;
+  transition: color .3s;
+}
+.section h2::before {
+  content: ''; display: inline-block;
+  width: 3px; height: 14px;
+  background: linear-gradient(180deg, var(--accent), #5b6ef5);
+  border-radius: 3px; flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(58,180,242,0.5);
+}
+
+/* =====================================================
+   EVENT INFO — 4-column field grid
+===================================================== */
+.event-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 20px;
+}
+
+/* =====================================================
+   FORM ELEMENTS
+===================================================== */
+.col { display: flex; flex-direction: column; }
+
+.section label,
+.designer-right label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--label-color);
+  margin-bottom: 8px; transition: color .3s;
+}
+
+.section input[type="text"],
+.section input[type="date"],
+.section input[type="number"],
+.section select,
+.designer-right input[type="text"],
+.designer-right input[type="number"],
+.designer-right select {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 12px; color: var(--text-main);
+  font-family: 'Poppins', sans-serif; font-size: 14px; padding: 13px 16px;
+  transition: border-color .25s, box-shadow .25s, background .25s, color .3s;
+}
+.section input::placeholder { color: rgba(122,164,204,0.4); }
+
+.section input:focus, .section select:focus,
+.designer-right input:focus, .designer-right select:focus {
+  outline: none; border-color: var(--accent);
+  background: var(--input-bg-focus);
+  box-shadow: 0 0 0 3px rgba(58,180,242,0.13);
+}
+
+.designer-right input[type="color"] {
+  width: 52px; height: 44px; padding: 4px 6px; border-radius: 10px; cursor: pointer;
+}
+
+select {
+  background-color: var(--select-bg) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--input-border) !important;
+}
+select option { background-color: var(--select-bg); color: var(--text-main); }
+
+/* =====================================================
+   CERTIFICATE DESIGNER — full-width two-panel row
+===================================================== */
+
+/* upload bar */
+.upload-area {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.file-box {
+  flex: 1; padding: 13px 20px; border-radius: 14px;
+  background: var(--file-bg);
+  border: 1.5px dashed var(--input-border);
+  color: var(--text-sub); font-size: 14px;
+  cursor: pointer; transition: all .25s ease;
+  display: flex; align-items: center; gap: 8px;
+}
+.file-box:hover { border-color: var(--accent); background: var(--file-hover); color: var(--text-main); }
+.file-box input { display: none; }
+
+/* status */
+#uploadStatus { font-size: 13px; margin-bottom: 12px; }
+.status.success { color: #22c55e; }
+.status.error   { color: #ef4444; }
+
+/* designer two-panel — canvas left, controls right */
+.designer-wrapper {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 20px;
+  margin-top: 4px;
+}
+
+.canvas-container {
+  padding: 20px;
+  background: var(--designer-panel);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.canvas-container canvas {
+  width: 100%; height: auto;
+  border-radius: 10px; cursor: move;
+  display: block;
+}
+
+.designer-right {
+  padding: 24px;
+  background: var(--designer-panel);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: background .4s, border-color .3s;
+}
+.designer-right h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.hint {
+  font-size: 12px; color: var(--text-hint); line-height: 1.55;
+  background: var(--hint-bg);
+  border-left: 2px solid rgba(58,180,242,0.3);
+  border-radius: 0 8px 8px 0;
+  padding: 9px 12px; margin-top: 10px;
+}
+
+/* =====================================================
+   BUTTONS
+===================================================== */
+button { font-family: 'Poppins', sans-serif; cursor: pointer; border: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff;
+  border-radius: 12px; font-size: 13px; font-weight: 600; letter-spacing: .06em;
+  padding: 13px 26px; position: relative; overflow: hidden;
+  box-shadow: 0 4px 18px rgba(59,130,246,0.3);
+  transition: transform .25s, box-shadow .25s; flex-shrink: 0;
+}
+.btn-primary::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.13), transparent 70%);
+  transform: translateX(-100%); transition: transform .55s ease;
+}
+.btn-primary:hover::before { transform: translateX(100%); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(59,130,246,0.45); }
+
+#createEventBtn {
+  background: linear-gradient(90deg, #5b6ef5, #3ab4f2);
+  color: #fff; border-radius: 14px; width: 100%;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .2em;
+  padding: 18px; position: relative; overflow: hidden;
+  box-shadow: 0 4px 24px rgba(58,180,242,0.28);
+  transition: transform .25s, box-shadow .25s;
+}
+#createEventBtn::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.14), transparent 70%);
+  transform: translateX(-100%); transition: transform .55s ease;
+}
+#createEventBtn:hover::before { transform: translateX(100%); }
+#createEventBtn:hover { transform: translateY(-2px); box-shadow: 0 8px 36px rgba(58,180,242,0.44); }
+
+/* =====================================================
+   MODAL
+===================================================== */
+.modal {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(2,8,18,0.78); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal.hidden { display: none; }
+.modal-content {
+  background: var(--modal-bg); border: 1px solid var(--card-border);
+  border-radius: 20px; width: 420px; max-width: 90%; padding: 28px 30px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+  animation: modalGlide .22s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes modalGlide {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-content h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 15px; font-weight: 700; letter-spacing: .08em;
+  color: var(--text-main); margin-bottom: 12px;
+}
+.modal-content p { font-size: 14px; color: var(--text-sub); margin-bottom: 22px; line-height: 1.6; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.modal-actions .btn { min-width: 90px; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+.btn-danger  { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
+.btn-secondary {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: var(--text-sub);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.12); color: var(--text-main); }
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
+@media (max-width: 1200px) {
+  .event-fields-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 900px) {
+  .designer-wrapper { grid-template-columns: 1fr; }
+  .designer-right { flex-direction: row; flex-wrap: wrap; gap: 14px; }
+  .designer-right h3 { width: 100%; }
+  .designer-right .col { flex: 1 1 140px; }
+}
+
+@media (max-width: 768px) {
+  .navbar { padding: 0 24px; }
+  .menu-toggle { display: block; }
+  .nav-links {
+    display: none; position: absolute;
+    top: 64px; right: 0; left: 0; flex-direction: column; gap: 0;
+    background: var(--navbar-bg); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--navbar-border); padding: 16px 24px;
+  }
+  .nav-links.active { display: flex; }
+  .nav-links a, .nav-links button { padding: 10px 0; }
+  .container { padding: 20px 16px; }
+  .section { padding: 24px 20px; }
+  .action-section { padding: 20px; }
+  .event-fields-grid { grid-template-columns: 1fr; }
+  .upload-area { flex-direction: column; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="page-grid-overlay"></div>
+
+<!-- ======================== NAVBAR ======================== -->
+<nav class="navbar">
+  <div class="logo">CAS · Admin</div>
+
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <div class="nav-links" id="navLinks">
+
+    <a class="active" href="dashboard.html">Create Event</a>
+    <a href="events.html">Manage Events</a>
+    <a href="bulk.html">Bulk Upload</a>
+    <a href="download.html">Download App</a>
+
+    <button class="theme-toggle" id="themeToggle" type="button">
+      <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </svg>
+      <span id="themeLabel">Light</span>
+    </button>
+
+    <button class="btn-logout" type="button">Logout</button>
+  </div>
+</nav>
+
+<!-- ======================== MAIN ======================== -->
+<main class="container">
+
+  <!-- ===== 1. EVENT INFORMATION — full width, 4 fields in a row ===== -->
+  <section class="section">
+    <h2>Event Information</h2>
+
+    <form id="eventForm">
+      <div class="event-fields-grid">
+
+        <div class="col">
+          <label for="eventName">Event Name</label>
+          <input id="eventName" type="text" placeholder="Enter event name" required>
+        </div>
+
+        <div class="col">
+          <label for="eventDate">Event Date</label>
+          <input id="eventDate" type="date" required>
+        </div>
+
+        <div class="col">
+          <label for="venue">Venue</label>
+          <input id="venue" type="text" placeholder="Enter venue">
+        </div>
+
+        <div class="col">
+          <label for="orgBy">Organized By</label>
+          <input id="orgBy" type="text" placeholder="Organizer name">
+        </div>
+
+      </div>
+    </form>
+  </section>
+
+  <!-- ===== 2. CERTIFICATE DESIGNER — full width ===== -->
+  <section class="section highlight">
+    <h2>Certificate Designer</h2>
+
+    <div class="upload-area">
+      <label for="templateFile" class="file-box" id="fileLabel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.6">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <span id="fileText">Select Certificate Template</span>
+        <input id="templateFile" type="file" accept="image/*">
+      </label>
+
+      <button id="uploadBtn" class="btn-primary" type="button">
+        Upload Template
+      </button>
+    </div>
+
+    <div id="uploadStatus" class="status" aria-live="polite"></div>
+
+    <div id="designerWrapper" class="designer-wrapper hidden">
+
+      <!-- Canvas — takes all remaining width -->
+      <div class="canvas-container">
+        <canvas id="templateCanvas" width="1100" height="850"></canvas>
+      </div>
+
+      <!-- Controls sidebar -->
+      <div class="designer-right">
+        <h3>Text Controls</h3>
+
+        <div class="col">
+          <label for="previewName">Preview Name</label>
+          <input id="previewName" type="text" value="Participant Name">
+        </div>
+
+        <div class="col">
+          <label for="fontSize">Font Size</label>
+          <input id="fontSize" type="number" value="36" min="10" max="300">
+        </div>
+
+        <div class="col">
+          <label for="fontColor">Font Color</label>
+          <input id="fontColor" type="color" value="#000000">
+        </div>
+
+        <div class="col">
+          <label for="textAlign">Alignment</label>
+          <select id="textAlign">
+            <option value="center">Center</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </select>
+        </div>
+
+        <p class="hint">
+          Drag the name on the certificate to reposition.
+          The red box indicates the QR code position.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== 3. CREATE EVENT — full-width CTA at bottom ===== -->
+  <section class="section action-section">
+    <button id="createEventBtn" class="btn-success full" type="button">
+      Create Event
+    </button>
+  </section>
+
+</main>
+
+<script src="script.js"></script>
+
+<!-- Custom Modal — all IDs unchanged for script.js -->
+<div id="customModal" class="modal hidden">
+  <div class="modal-content">
+    <h3 id="modalTitle"></h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button id="modalCancel" class="btn btn-secondary">Cancel</button>
+      <button id="modalConfirm" class="btn btn-danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── THEME TOGGLE ── */
+const root    = document.documentElement;
+const toggle  = document.getElementById('themeToggle');
+const label   = document.getElementById('themeLabel');
+const iconSun = document.getElementById('iconSun');
+
+const MOON_PATH = `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>`;
+const SUN_PATH  = `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`;
+
+let dark = true;
+if (localStorage.getItem('cas-theme') === 'light') { dark = false; applyTheme(); }
+
+toggle.addEventListener('click', () => {
+  dark = !dark; applyTheme();
+  localStorage.setItem('cas-theme', dark ? 'dark' : 'light');
+});
+
+function applyTheme() {
+  root.setAttribute('data-theme', dark ? 'dark' : 'light');
+  label.textContent = dark ? 'Light' : 'Dark';
+  iconSun.innerHTML = dark ? MOON_PATH : SUN_PATH;
+}
+
+</script>
+</body>
+</html>

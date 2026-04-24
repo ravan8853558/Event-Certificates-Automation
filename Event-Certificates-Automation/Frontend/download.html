@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Download App — CAS Admin</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+<style>
+/* =====================================================
+   CSS VARIABLES — Dark / Light (identical to all pages)
+===================================================== */
+:root,
+[data-theme="dark"] {
+  --bg-grad:          radial-gradient(ellipse 80% 70% at 50% 20%, #0c2a5a 0%, #050d1a 70%);
+  --blob1:            #1a4faa;
+  --blob2:            #6c63ff;
+  --navbar-bg:        rgba(5,13,26,0.88);
+  --navbar-border:    rgba(58,180,242,0.13);
+  --card-bg:          rgba(8,22,46,0.72);
+  --card-border:      rgba(80,160,255,0.14);
+  --card-shadow:      0 0 0 1px rgba(60,180,255,0.04), 0 24px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  --panel-bg:         rgba(10,26,56,0.65);
+  --grid-line:        rgba(60,140,255,0.035);
+  --text-main:        #e4eeff;
+  --text-sub:         #7aa4cc;
+  --text-hint:        #4a7aa0;
+  --accent:           #3ab4f2;
+  --accent-glow:      rgba(58,180,242,0.18);
+  --logout-color:     #f87171;
+  --logout-border:    rgba(239,68,68,0.4);
+  --logout-hover:     rgba(239,68,68,0.1);
+  --toggle-bg:        rgba(8,22,46,0.72);
+  --toggle-border:    rgba(80,160,255,0.25);
+  --toggle-color:     #7aa4cc;
+  --divider:          rgba(80,160,255,0.1);
+  --chip-bg:          rgba(58,180,242,0.09);
+  --chip-border:      rgba(58,180,242,0.2);
+  --pill-bg:          rgba(58,180,242,0.08);
+  --pill-border:      rgba(58,180,242,0.18);
+  --hero-title-grad:  linear-gradient(135deg, #fff 30%, #3ab4f2 80%);
+  --meta-border:      rgba(80,160,255,0.12);
+  --badge-color:      #3ab4f2;
+  --app-title-grad:   linear-gradient(135deg, #fff 20%, #3ab4f2 70%);
+  --version-bg:       rgba(58,180,242,0.08);
+  --version-border:   rgba(58,180,242,0.2);
+  --scan-line:        rgba(58,180,242,0.25);
+}
+
+[data-theme="light"] {
+  --bg-grad:          radial-gradient(ellipse 80% 70% at 50% 20%, #c0d8f8 0%, #dde8f7 70%);
+  --blob1:            #90bef5;
+  --blob2:            #b4aeff;
+  --navbar-bg:        rgba(255,255,255,0.88);
+  --navbar-border:    rgba(60,130,220,0.18);
+  --card-bg:          rgba(255,255,255,0.82);
+  --card-border:      rgba(60,130,220,0.18);
+  --card-shadow:      0 4px 40px rgba(60,100,200,0.13), inset 0 1px 0 rgba(255,255,255,0.9);
+  --panel-bg:         rgba(230,243,255,0.75);
+  --grid-line:        rgba(60,130,220,0.06);
+  --text-main:        #0e1e38;
+  --text-sub:         #3a6090;
+  --text-hint:        #5580a8;
+  --accent:           #1a72c8;
+  --accent-glow:      rgba(26,114,200,0.14);
+  --logout-color:     #dc2626;
+  --logout-border:    rgba(220,38,38,0.35);
+  --logout-hover:     rgba(220,38,38,0.08);
+  --toggle-bg:        rgba(255,255,255,0.85);
+  --toggle-border:    rgba(60,130,220,0.3);
+  --toggle-color:     #3a6090;
+  --divider:          rgba(60,130,220,0.12);
+  --chip-bg:          rgba(26,114,200,0.07);
+  --chip-border:      rgba(26,114,200,0.18);
+  --pill-bg:          rgba(26,114,200,0.07);
+  --pill-border:      rgba(26,114,200,0.18);
+  --hero-title-grad:  linear-gradient(135deg, #0a1a40 30%, #1a72c8 80%);
+  --meta-border:      rgba(60,130,220,0.14);
+  --badge-color:      #1a72c8;
+  --app-title-grad:   linear-gradient(135deg, #0a1a40 20%, #1a72c8 70%);
+  --version-bg:       rgba(26,114,200,0.07);
+  --version-border:   rgba(26,114,200,0.18);
+  --scan-line:        rgba(26,114,200,0.18);
+}
+
+/* =====================================================
+   BASE
+===================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background: var(--bg-grad); background-attachment: fixed;
+  color: var(--text-main); line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh; overflow-x: hidden;
+  transition: background .4s, color .3s;
+}
+
+.hidden { display: none !important; }
+
+/* blobs */
+.blob {
+  position: fixed; border-radius: 50%;
+  filter: blur(90px); opacity: 0.18; pointer-events: none; z-index: 0;
+  animation: blobDrift 14s ease-in-out infinite alternate;
+}
+.blob-1 { width:600px; height:600px; background:var(--blob1); top:-160px; left:-140px; }
+.blob-2 { width:380px; height:380px; background:var(--blob2); bottom:-80px; right:-80px; animation-delay:-6s; animation-duration:10s; }
+@keyframes blobDrift {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(30px,20px) scale(1.07); }
+}
+
+/* grid overlay */
+.page-grid-overlay {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* =====================================================
+   NAVBAR
+===================================================== */
+.navbar {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 52px; height: 64px;
+  background: var(--navbar-bg);
+  backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid var(--navbar-border);
+  transition: background .4s, border-color .3s;
+}
+
+.logo {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+  background: linear-gradient(135deg, var(--text-main) 30%, var(--accent) 80%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a {
+  font-size: 13px; color: var(--text-sub); text-decoration: none;
+  font-weight: 500; letter-spacing: .04em;
+  position: relative; padding-bottom: 3px; transition: color .25s;
+}
+.nav-links a::after {
+  content: ''; position: absolute; bottom: -3px; left: 0;
+  width: 0; height: 1.5px; background: var(--accent);
+  border-radius: 2px; transition: width .28s ease;
+}
+.nav-links a:hover, .nav-links a.active { color: var(--accent); }
+.nav-links a:hover::after, .nav-links a.active::after { width: 100%; }
+
+.theme-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border-radius: 40px;
+  border: 1px solid var(--toggle-border);
+  background: var(--toggle-bg); backdrop-filter: blur(12px);
+  color: var(--toggle-color);
+  font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .06em;
+  cursor: pointer; transition: all .3s ease; white-space: nowrap;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); transform: none; }
+.theme-toggle svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+.btn-logout {
+  background: transparent; border: 1px solid var(--logout-border); color: var(--logout-color);
+  font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 8px; letter-spacing: .05em;
+  cursor: pointer; font-family: 'Poppins', sans-serif; transition: all .25s ease;
+}
+.btn-logout:hover { background: var(--logout-hover); border-color: #ef4444; color: #ef4444; transform: translateY(-1px); }
+
+.menu-toggle { display: none; background: none; border: none; color: var(--text-main); font-size: 26px; cursor: pointer; }
+
+/* =====================================================
+   LAYOUT
+===================================================== */
+.container {
+  position: relative; z-index: 1;
+  max-width: 680px; margin: 0 auto;
+  padding: 52px 40px 60px;
+}
+
+/* =====================================================
+   HERO
+===================================================== */
+.download-hero {
+  text-align: center;
+  margin-bottom: 36px;
+  animation: heroIn .7s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes heroIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hero-eyebrow {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: .28em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.hero-eyebrow::before, .hero-eyebrow::after {
+  content: ''; flex: 1; max-width: 60px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent));
+}
+.hero-eyebrow::after { transform: scaleX(-1); }
+
+.download-hero h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  font-weight: 900; letter-spacing: .06em;
+  background: var(--hero-title-grad);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: 14px; line-height: 1.2;
+}
+
+.download-hero p {
+  font-size: 14px; color: var(--text-sub);
+  max-width: 480px; margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* =====================================================
+   FEATURE PILLS
+===================================================== */
+.feature-row {
+  display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 40px;
+  animation: heroIn .7s .1s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+.feature-pill {
+  padding: 7px 16px; border-radius: 30px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  color: var(--text-sub);
+  font-size: 12px; font-weight: 500; letter-spacing: .04em;
+  display: flex; align-items: center; gap: 6px;
+  transition: all .25s ease;
+}
+.feature-pill:hover {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--chip-bg); transform: translateY(-2px);
+}
+.feature-pill svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+/* =====================================================
+   DOWNLOAD CARD
+===================================================== */
+.download-card-premium {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 26px;
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: var(--card-shadow);
+  padding: 48px 44px 40px;
+  text-align: center;
+  position: relative; overflow: hidden;
+  animation: heroIn .7s .2s cubic-bezier(0.22,1,0.36,1) both;
+  transition: background .4s, border-color .3s, box-shadow .3s;
+}
+
+/* scanline shimmer on card */
+.download-card-premium::before {
+  content: '';
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--scan-line), transparent);
+  animation: scanMove 5s linear infinite;
+  pointer-events: none;
+}
+@keyframes scanMove {
+  0%   { top: -2px; opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { top: 102%; opacity: 0; }
+}
+
+/* android icon circle */
+.app-icon-wrap {
+  width: 80px; height: 80px; border-radius: 22px; margin: 0 auto 24px;
+  background: linear-gradient(135deg, #1a3a6a, #0e6ba8);
+  border: 1px solid rgba(58,180,242,0.25);
+  box-shadow: 0 0 30px rgba(58,180,242,0.2);
+  display: flex; align-items: center; justify-content: center;
+  animation: iconPop .6s .4s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes iconPop {
+  from { transform: scale(0.5); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* badge */
+.app-badge {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px; font-weight: 700; letter-spacing: .3em; text-transform: uppercase;
+  color: var(--badge-color); margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.app-badge::before, .app-badge::after {
+  content: ''; width: 24px; height: 1px; background: var(--accent); opacity: 0.4;
+}
+
+/* version chip */
+.app-version-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 20px; font-weight: 900; letter-spacing: .08em;
+  background: var(--app-title-grad);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: 8px;
+}
+
+.version-tag {
+  display: inline-block;
+  font-family: 'Poppins', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  background: var(--version-bg); border: 1px solid var(--version-border);
+  color: var(--accent); border-radius: 20px; padding: 3px 10px;
+  vertical-align: middle;
+}
+
+.app-desc {
+  font-size: 13px; color: var(--text-hint); margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+/* =====================================================
+   DOWNLOAD BUTTON
+===================================================== */
+.apk-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 17px;
+  border-radius: 14px; border: none;
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+  color: #fff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .18em;
+  text-decoration: none;
+  position: relative; overflow: hidden;
+  box-shadow: 0 4px 28px rgba(34,197,94,0.3);
+  transition: transform .25s, box-shadow .25s;
+  margin-bottom: 0;
+}
+.apk-btn::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.14), transparent 70%);
+  transform: translateX(-100%); transition: transform .55s ease;
+}
+.apk-btn:hover::before { transform: translateX(100%); }
+.apk-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 40px rgba(34,197,94,0.48);
+}
+.apk-btn svg { flex-shrink: 0; }
+
+/* =====================================================
+   APP META ROW
+===================================================== */
+.app-meta {
+  display: flex; align-items: center; justify-content: center; gap: 0;
+  flex-wrap: wrap;
+  margin-top: 24px; padding-top: 20px;
+  border-top: 1px solid var(--meta-border);
+}
+
+.meta-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 0 20px; flex: 1; min-width: 80px;
+}
+.meta-item:not(:last-child) {
+  border-right: 1px solid var(--meta-border);
+}
+
+.meta-icon { color: var(--accent); opacity: 0.7; margin-bottom: 2px; }
+.meta-value {
+  font-size: 13px; font-weight: 700; color: var(--text-main);
+  letter-spacing: .02em;
+}
+.meta-label {
+  font-size: 10px; color: var(--text-hint);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
+@media (max-width: 768px) {
+  .navbar { padding: 0 24px; }
+  .menu-toggle { display: block; }
+  .nav-links {
+    display: none; position: absolute;
+    top: 64px; right: 0; left: 0;
+    flex-direction: column; gap: 0;
+    background: var(--navbar-bg); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--navbar-border); padding: 16px 24px;
+  }
+  .nav-links.active { display: flex; }
+  .nav-links a, .nav-links button { padding: 10px 0; }
+  .container { padding: 32px 20px 48px; }
+  .download-card-premium { padding: 36px 24px 32px; }
+  .meta-item { padding: 0 12px; }
+}
+
+@media (max-width: 480px) {
+  .feature-row { gap: 8px; }
+  .app-meta { gap: 8px; }
+  .meta-item { border-right: none !important; border-bottom: 1px solid var(--meta-border); padding: 10px 0; }
+  .meta-item:last-child { border-bottom: none; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="page-grid-overlay"></div>
+
+<!-- ======================== NAVBAR ======================== -->
+<nav class="navbar">
+  <div class="logo">CAS · Admin</div>
+
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <div class="nav-links" id="navLinks">
+    <a href="dashboard.html">Create Event</a>
+    <a href="events.html">Manage Events</a>
+    <a href="bulk.html">Bulk Upload</a>
+    <a href="download.html" class="active">Download App</a>
+
+    <button class="theme-toggle" id="themeToggle" type="button">
+      <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </svg>
+      <span id="themeLabel">Light</span>
+    </button>
+
+    <button class="btn-logout" type="button">Logout</button>
+  </div>
+</nav>
+
+<!-- ======================== MAIN ======================== -->
+<main class="container">
+
+  <!-- HERO -->
+  <div class="download-hero">
+    <div class="hero-eyebrow">Mobile Application</div>
+    <h1>Get the Android App</h1>
+    <p>Fast, secure and optimized mobile access to your Certificate Automation System — carry full admin power in your pocket.</p>
+  </div>
+
+  <!-- FEATURE PILLS -->
+  <div class="feature-row">
+    <div class="feature-pill">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Bulk Generation
+    </div>
+    <div class="feature-pill">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Secure Login
+    </div>
+    <div class="feature-pill">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      QR Verification
+    </div>
+    <div class="feature-pill">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      CSV Processing
+    </div>
+    <div class="feature-pill">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.09"/></svg>
+      Live Sync
+    </div>
+  </div>
+
+  <!-- DOWNLOAD CARD -->
+  <div class="download-card-premium">
+
+    <!-- App icon -->
+    <div class="app-icon-wrap">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#3ab4f2" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="2"/>
+        <line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/>
+      </svg>
+    </div>
+
+    <!-- Badge -->
+    <div class="app-badge">Android Application</div>
+
+    <!-- Title + version -->
+    <div style="margin-bottom:10px;">
+      <span class="app-version-chip">CAS</span>
+      <span class="version-tag">v2.0</span>
+    </div>
+
+    <p class="app-desc">The official mobile companion for the Certificate Automation System. Generate, verify, and distribute certificates directly from your Android device.</p>
+
+    <!-- Download button -->
+    <a href="app/cas-2.0.apk" class="apk-btn" download>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Install for Android
+    </a>
+
+    <!-- Meta row -->
+    <div class="app-meta">
+      <div class="meta-item">
+        <svg class="meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        <span class="meta-value">20 MB</span>
+        <span class="meta-label">Size</span>
+      </div>
+      <div class="meta-item">
+        <svg class="meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/></svg>
+        <span class="meta-value">Android 8.0+</span>
+        <span class="meta-label">Requires</span>
+      </div>
+      <div class="meta-item">
+        <svg class="meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span class="meta-value">Secure Build</span>
+        <span class="meta-label">Verified</span>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script src="script.js"></script>
+
+<script>
+/* ── AUTH GUARD ── */
+if (!localStorage.getItem('adminToken')) {
+  window.location.href = 'index.html';
+}
+
+/* ── THEME TOGGLE ── */
+const root    = document.documentElement;
+const toggle  = document.getElementById('themeToggle');
+const label   = document.getElementById('themeLabel');
+const iconSun = document.getElementById('iconSun');
+
+const MOON_PATH = `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>`;
+const SUN_PATH  = `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`;
+
+let dark = true;
+if (localStorage.getItem('cas-theme') === 'light') { dark = false; applyTheme(); }
+
+toggle.addEventListener('click', () => {
+  dark = !dark; applyTheme();
+  localStorage.setItem('cas-theme', dark ? 'dark' : 'light');
+});
+
+function applyTheme() {
+  root.setAttribute('data-theme', dark ? 'dark' : 'light');
+  label.textContent = dark ? 'Light' : 'Dark';
+  iconSun.innerHTML = dark ? MOON_PATH : SUN_PATH;
+}
+
+</script>
+</body>
+</html>
